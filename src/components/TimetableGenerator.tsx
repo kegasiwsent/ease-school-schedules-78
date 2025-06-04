@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Calendar, Users, BookOpen, Clock, Sparkles, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, Calendar, Users, BookOpen, Clock, Sparkles, ArrowRight, ArrowLeft, Edit, Check, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import TimetableDisplay from './TimetableDisplay';
 
@@ -15,7 +15,7 @@ interface Teacher {
   name: string;
   subjects: string[];
   contactInfo?: string;
-  assignedPeriods: number; // Current periods assigned
+  assignedPeriods: { [subject: string]: number }; // Track periods per subject
 }
 
 interface SubjectAssignment {
@@ -41,6 +41,12 @@ const TimetableGenerator = () => {
   const [newTeacherSubjects, setNewTeacherSubjects] = useState<string[]>([]);
   const [newTeacherContact, setNewTeacherContact] = useState('');
   
+  // Editing state
+  const [editingTeacher, setEditingTeacher] = useState<string | null>(null);
+  const [editTeacherName, setEditTeacherName] = useState('');
+  const [editTeacherSubjects, setEditTeacherSubjects] = useState<string[]>([]);
+  const [editTeacherContact, setEditTeacherContact] = useState('');
+  
   // Step 2 & 3: Class Configuration
   const [classConfigs, setClassConfigs] = useState<ClassConfig[]>([]);
   const [currentClass, setCurrentClass] = useState('');
@@ -58,9 +64,16 @@ const TimetableGenerator = () => {
   const classes = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
   const divisions = ['A', 'B', 'C', 'D'];
 
-  // Helper function to calculate max periods for a teacher
-  const getMaxPeriodsForTeacher = (teacher: Teacher) => {
-    return teacher.subjects.length * 42;
+  // Helper function to get available periods for a teacher for a specific subject
+  const getAvailablePeriodsForSubject = (teacher: Teacher, subject: string) => {
+    const assignedForSubject = teacher.assignedPeriods[subject] || 0;
+    // Allow unlimited periods for the same subject, but track it
+    return assignedForSubject;
+  };
+
+  // Helper function to check if teacher can take more periods for a subject
+  const canTeacherTakeSubject = (teacher: Teacher, subject: string) => {
+    return teacher.subjects.includes(subject);
   };
 
   // Step 1: Teacher Management
@@ -72,7 +85,7 @@ const TimetableGenerator = () => {
         name: newTeacherName.trim(),
         subjects: [...newTeacherSubjects],
         contactInfo: newTeacherContact.trim() || undefined,
-        assignedPeriods: 0
+        assignedPeriods: {}
       };
       setTeachers([...teachers, newTeacher]);
       setNewTeacherName('');
@@ -91,6 +104,55 @@ const TimetableGenerator = () => {
 
   const toggleTeacherSubject = (subject: string) => {
     setNewTeacherSubjects(prev => 
+      prev.includes(subject) 
+        ? prev.filter(s => s !== subject)
+        : [...prev, subject]
+    );
+  };
+
+  // Edit teacher functionality
+  const startEditingTeacher = (teacher: Teacher) => {
+    setEditingTeacher(teacher.id);
+    setEditTeacherName(teacher.name);
+    setEditTeacherSubjects([...teacher.subjects]);
+    setEditTeacherContact(teacher.contactInfo || '');
+  };
+
+  const cancelEditingTeacher = () => {
+    setEditingTeacher(null);
+    setEditTeacherName('');
+    setEditTeacherSubjects([]);
+    setEditTeacherContact('');
+  };
+
+  const saveEditingTeacher = () => {
+    if (!editingTeacher || !editTeacherName.trim() || editTeacherSubjects.length === 0) return;
+
+    setTeachers(prev => prev.map(teacher => {
+      if (teacher.id === editingTeacher) {
+        return {
+          ...teacher,
+          name: editTeacherName.trim(),
+          subjects: [...editTeacherSubjects],
+          contactInfo: editTeacherContact.trim() || undefined
+        };
+      }
+      return teacher;
+    }));
+
+    setEditingTeacher(null);
+    setEditTeacherName('');
+    setEditTeacherSubjects([]);
+    setEditTeacherContact('');
+
+    toast({
+      title: "Teacher Updated",
+      description: "Teacher information has been updated successfully.",
+    });
+  };
+
+  const toggleEditTeacherSubject = (subject: string) => {
+    setEditTeacherSubjects(prev => 
       prev.includes(subject) 
         ? prev.filter(s => s !== subject)
         : [...prev, subject]
@@ -160,14 +222,19 @@ const TimetableGenerator = () => {
     updatedConfigs.push(currentConfig);
     setClassConfigs(updatedConfigs);
     
-    // Update teacher assigned periods
+    // Update teacher assigned periods per subject
     const updatedTeachers = teachers.map(teacher => {
-      const totalPeriods = updatedConfigs.reduce((total, config) => {
-        return total + config.subjectAssignments
+      const subjectPeriods: { [subject: string]: number } = {};
+      
+      updatedConfigs.forEach(config => {
+        config.subjectAssignments
           .filter(assignment => assignment.teacherId === teacher.id)
-          .reduce((sum, assignment) => sum + assignment.periodsPerWeek, 0);
-      }, 0);
-      return { ...teacher, assignedPeriods: totalPeriods };
+          .forEach(assignment => {
+            subjectPeriods[assignment.subject] = (subjectPeriods[assignment.subject] || 0) + assignment.periodsPerWeek;
+          });
+      });
+      
+      return { ...teacher, assignedPeriods: subjectPeriods };
     });
     setTeachers(updatedTeachers);
 
@@ -184,9 +251,7 @@ const TimetableGenerator = () => {
   };
 
   const getAvailableTeachers = (subject: string) => {
-    return teachers.filter(teacher => 
-      teacher.subjects.includes(subject) && teacher.assignedPeriods < getMaxPeriodsForTeacher(teacher)
-    );
+    return teachers.filter(teacher => teacher.subjects.includes(subject));
   };
 
   // Step 5: Generate Timetables
@@ -329,33 +394,92 @@ const TimetableGenerator = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {teachers.map(teacher => {
-                      const maxPeriods = getMaxPeriodsForTeacher(teacher);
-                      return (
-                        <div key={teacher.id} className="p-4 border rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="font-medium">{teacher.name}</div>
-                            <div className="flex items-center space-x-2">
-                              <Badge variant={teacher.assignedPeriods >= maxPeriods ? "destructive" : "secondary"}>
-                                {teacher.assignedPeriods}/{maxPeriods} periods
-                              </Badge>
-                              <Trash2 
-                                className="w-4 h-4 cursor-pointer hover:text-red-500" 
-                                onClick={() => removeTeacher(teacher.id)}
+                    {teachers.map(teacher => (
+                      <div key={teacher.id} className="p-4 border rounded-lg">
+                        {editingTeacher === teacher.id ? (
+                          <div className="space-y-4">
+                            <div>
+                              <Label>Teacher Name</Label>
+                              <Input
+                                value={editTeacherName}
+                                onChange={(e) => setEditTeacherName(e.target.value)}
+                                placeholder="Enter teacher name"
                               />
                             </div>
-                          </div>
-                          <div className="text-sm text-gray-600 mb-1">
-                            Subjects: {teacher.subjects.join(', ')} ({teacher.subjects.length} × 42 periods)
-                          </div>
-                          {teacher.contactInfo && (
-                            <div className="text-sm text-gray-500">
-                              Contact: {teacher.contactInfo}
+                            
+                            <div>
+                              <Label>Subjects</Label>
+                              <div className="grid grid-cols-2 gap-2 mt-2">
+                                {availableSubjects.map(subject => (
+                                  <div key={subject} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`edit-subject-${subject}`}
+                                      checked={editTeacherSubjects.includes(subject)}
+                                      onCheckedChange={() => toggleEditTeacherSubject(subject)}
+                                    />
+                                    <Label htmlFor={`edit-subject-${subject}`} className="text-sm">{subject}</Label>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            
+                            <div>
+                              <Label>Contact Info</Label>
+                              <Input
+                                value={editTeacherContact}
+                                onChange={(e) => setEditTeacherContact(e.target.value)}
+                                placeholder="Phone number or email"
+                              />
+                            </div>
+                            
+                            <div className="flex space-x-2">
+                              <Button size="sm" onClick={saveEditingTeacher}>
+                                <Check className="w-4 h-4 mr-1" />
+                                Save
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={cancelEditingTeacher}>
+                                <X className="w-4 h-4 mr-1" />
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="font-medium">{teacher.name}</div>
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => startEditingTeacher(teacher)}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Trash2 
+                                  className="w-4 h-4 cursor-pointer hover:text-red-500" 
+                                  onClick={() => removeTeacher(teacher.id)}
+                                />
+                              </div>
+                            </div>
+                            <div className="text-sm text-gray-600 mb-2">
+                              Subjects: {teacher.subjects.join(', ')}
+                            </div>
+                            {Object.keys(teacher.assignedPeriods).length > 0 && (
+                              <div className="text-sm text-gray-600 mb-2">
+                                Assigned Periods: {Object.entries(teacher.assignedPeriods).map(([subject, periods]) => 
+                                  `${subject}: ${periods}`
+                                ).join(', ')}
+                              </div>
+                            )}
+                            {teacher.contactInfo && (
+                              <div className="text-sm text-gray-500">
+                                Contact: {teacher.contactInfo}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -481,7 +605,7 @@ const TimetableGenerator = () => {
                                 <Input
                                   type="number"
                                   min="1"
-                                  max="10"
+                                  max="35"
                                   defaultValue={currentAssignment?.periodsPerWeek || 5}
                                   onChange={(e) => {
                                     const periods = parseInt(e.target.value) || 5;
@@ -506,10 +630,10 @@ const TimetableGenerator = () => {
                                   </SelectTrigger>
                                   <SelectContent>
                                     {availableTeachers.map(teacher => {
-                                      const maxPeriods = getMaxPeriodsForTeacher(teacher);
+                                      const assignedForSubject = teacher.assignedPeriods[subject] || 0;
                                       return (
                                         <SelectItem key={teacher.id} value={teacher.id}>
-                                          {teacher.name} ({teacher.assignedPeriods}/{maxPeriods})
+                                          {teacher.name} ({subject}: {assignedForSubject} periods)
                                         </SelectItem>
                                       );
                                     })}

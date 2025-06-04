@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Calendar, Users, BookOpen, Clock, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import TimetableDisplay from './TimetableDisplay';
@@ -31,6 +31,14 @@ interface Class {
 const TimetableGenerator = () => {
   const { toast } = useToast();
   const [periodsPerDay, setPeriodsPerDay] = useState(7);
+  
+  // Form states
+  const [newClassName, setNewClassName] = useState('');
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [newSubjectPeriods, setNewSubjectPeriods] = useState(3);
+  const [newTeacherName, setNewTeacherName] = useState('');
+  const [selectedSubjectForTeacher, setSelectedSubjectForTeacher] = useState('');
+  
   const [classes, setClasses] = useState<Class[]>([
     { id: '1', name: '6A' },
     { id: '2', name: '6B' }
@@ -85,45 +93,71 @@ const TimetableGenerator = () => {
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
-  const addClass = () => {
-    const newClass: Class = {
-      id: Date.now().toString(),
-      name: `Class ${classes.length + 1}`
-    };
-    setClasses([...classes, newClass]);
+  const handleAddClass = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newClassName.trim()) {
+      const newClass: Class = {
+        id: Date.now().toString(),
+        name: newClassName.trim()
+      };
+      setClasses([...classes, newClass]);
+      setNewClassName('');
+      toast({
+        title: "Class Added",
+        description: `${newClass.name} has been added successfully.`,
+      });
+    }
   };
 
   const removeClass = (id: string) => {
     setClasses(classes.filter(c => c.id !== id));
   };
 
-  const addSubject = () => {
-    const newSubject: Subject = {
-      id: Date.now().toString(),
-      name: `Subject ${subjects.length + 1}`,
-      periodsPerWeek: 3
-    };
-    setSubjects([...subjects, newSubject]);
+  const handleAddSubject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newSubjectName.trim()) {
+      const newSubject: Subject = {
+        id: Date.now().toString(),
+        name: newSubjectName.trim(),
+        periodsPerWeek: newSubjectPeriods
+      };
+      setSubjects([...subjects, newSubject]);
+      setNewSubjectName('');
+      setNewSubjectPeriods(3);
+      toast({
+        title: "Subject Added",
+        description: `${newSubject.name} has been added with ${newSubject.periodsPerWeek} periods per week.`,
+      });
+    }
   };
 
   const removeSubject = (id: string) => {
     setSubjects(subjects.filter(s => s.id !== id));
   };
 
-  const addTeacher = () => {
-    const newTeacher: Teacher = {
-      id: Date.now().toString(),
-      name: `Teacher ${teachers.length + 1}`,
-      subjects: [],
-      availability: {
-        'Monday': Array(periodsPerDay).fill(true),
-        'Tuesday': Array(periodsPerDay).fill(true),
-        'Wednesday': Array(periodsPerDay).fill(true),
-        'Thursday': Array(periodsPerDay).fill(true),
-        'Friday': Array(periodsPerDay).fill(true)
-      }
-    };
-    setTeachers([...teachers, newTeacher]);
+  const handleAddTeacher = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newTeacherName.trim() && selectedSubjectForTeacher) {
+      const newTeacher: Teacher = {
+        id: Date.now().toString(),
+        name: newTeacherName.trim(),
+        subjects: [selectedSubjectForTeacher],
+        availability: {
+          'Monday': Array(periodsPerDay).fill(true),
+          'Tuesday': Array(periodsPerDay).fill(true),
+          'Wednesday': Array(periodsPerDay).fill(true),
+          'Thursday': Array(periodsPerDay).fill(true),
+          'Friday': Array(periodsPerDay).fill(true)
+        }
+      };
+      setTeachers([...teachers, newTeacher]);
+      setNewTeacherName('');
+      setSelectedSubjectForTeacher('');
+      toast({
+        title: "Teacher Added",
+        description: `${newTeacher.name} has been added for ${selectedSubjectForTeacher}.`,
+      });
+    }
   };
 
   const removeTeacher = (id: string) => {
@@ -253,7 +287,19 @@ const TimetableGenerator = () => {
               <CardDescription>Manage your school classes</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="space-y-4">
+                <form onSubmit={handleAddClass} className="flex space-x-2">
+                  <Input
+                    placeholder="Enter class name (e.g., 6A, 7B)"
+                    value={newClassName}
+                    onChange={(e) => setNewClassName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button type="submit" size="sm">
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add
+                  </Button>
+                </form>
                 <div className="flex flex-wrap gap-2">
                   {classes.map(cls => (
                     <Badge key={cls.id} variant="secondary" className="flex items-center space-x-2">
@@ -265,10 +311,6 @@ const TimetableGenerator = () => {
                     </Badge>
                   ))}
                 </div>
-                <Button onClick={addClass} variant="outline" size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Class
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -283,23 +325,44 @@ const TimetableGenerator = () => {
               <CardDescription>Configure subjects and their weekly periods</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {subjects.map(subject => (
-                  <div key={subject.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="font-medium">{subject.name}</div>
-                      <div className="text-sm text-gray-500">{subject.periodsPerWeek} periods/week</div>
-                    </div>
-                    <Trash2 
-                      className="w-4 h-4 cursor-pointer hover:text-red-500" 
-                      onClick={() => removeSubject(subject.id)}
+              <div className="space-y-4">
+                <form onSubmit={handleAddSubject} className="space-y-3">
+                  <div className="flex space-x-2">
+                    <Input
+                      placeholder="Enter subject name"
+                      value={newSubjectName}
+                      onChange={(e) => setNewSubjectName(e.target.value)}
+                      className="flex-1"
                     />
+                    <Input
+                      type="number"
+                      placeholder="Periods"
+                      value={newSubjectPeriods}
+                      onChange={(e) => setNewSubjectPeriods(parseInt(e.target.value) || 3)}
+                      min="1"
+                      max="10"
+                      className="w-24"
+                    />
+                    <Button type="submit" size="sm">
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add
+                    </Button>
                   </div>
-                ))}
-                <Button onClick={addSubject} variant="outline" size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Subject
-                </Button>
+                </form>
+                <div className="space-y-2">
+                  {subjects.map(subject => (
+                    <div key={subject.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex-1">
+                        <div className="font-medium">{subject.name}</div>
+                        <div className="text-sm text-gray-500">{subject.periodsPerWeek} periods/week</div>
+                      </div>
+                      <Trash2 
+                        className="w-4 h-4 cursor-pointer hover:text-red-500" 
+                        onClick={() => removeSubject(subject.id)}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -317,31 +380,53 @@ const TimetableGenerator = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {teachers.map(teacher => (
-                  <div key={teacher.id} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="font-medium">{teacher.name}</div>
-                      <Trash2 
-                        className="w-4 h-4 cursor-pointer hover:text-red-500" 
-                        onClick={() => removeTeacher(teacher.id)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-sm text-gray-600">Subjects:</div>
-                      <div className="flex flex-wrap gap-1">
-                        {teacher.subjects.map(subject => (
-                          <Badge key={subject} variant="outline" className="text-xs">
-                            {subject}
-                          </Badge>
-                        ))}
+                <form onSubmit={handleAddTeacher} className="space-y-3">
+                  <Input
+                    placeholder="Enter teacher name"
+                    value={newTeacherName}
+                    onChange={(e) => setNewTeacherName(e.target.value)}
+                  />
+                  <Select value={selectedSubjectForTeacher} onValueChange={setSelectedSubjectForTeacher}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select subject to teach" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subjects.map(subject => (
+                        <SelectItem key={subject.id} value={subject.name}>
+                          {subject.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button type="submit" size="sm" className="w-full">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Teacher
+                  </Button>
+                </form>
+                
+                <div className="space-y-3">
+                  {teachers.map(teacher => (
+                    <div key={teacher.id} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="font-medium">{teacher.name}</div>
+                        <Trash2 
+                          className="w-4 h-4 cursor-pointer hover:text-red-500" 
+                          onClick={() => removeTeacher(teacher.id)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm text-gray-600">Subjects:</div>
+                        <div className="flex flex-wrap gap-1">
+                          {teacher.subjects.map(subject => (
+                            <Badge key={subject} variant="outline" className="text-xs">
+                              {subject}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-                <Button onClick={addTeacher} variant="outline" size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Teacher
-                </Button>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +15,7 @@ interface Teacher {
   name: string;
   subjects: string[];
   contactInfo?: string;
-  assignedPeriods: number; // Current periods assigned (max 42)
+  assignedPeriods: number; // Current periods assigned
 }
 
 interface SubjectAssignment {
@@ -58,6 +57,11 @@ const TimetableGenerator = () => {
   const availableSubjects = ['English', 'Maths', 'SST', 'Hindi', 'Gujarati', 'Computer', 'PE'];
   const classes = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
   const divisions = ['A', 'B', 'C', 'D'];
+
+  // Helper function to calculate max periods for a teacher
+  const getMaxPeriodsForTeacher = (teacher: Teacher) => {
+    return teacher.subjects.length * 42;
+  };
 
   // Step 1: Teacher Management
   const handleAddTeacher = (e: React.FormEvent) => {
@@ -181,7 +185,7 @@ const TimetableGenerator = () => {
 
   const getAvailableTeachers = (subject: string) => {
     return teachers.filter(teacher => 
-      teacher.subjects.includes(subject) && teacher.assignedPeriods < 42
+      teacher.subjects.includes(subject) && teacher.assignedPeriods < getMaxPeriodsForTeacher(teacher)
     );
   };
 
@@ -325,30 +329,33 @@ const TimetableGenerator = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {teachers.map(teacher => (
-                      <div key={teacher.id} className="p-4 border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-medium">{teacher.name}</div>
-                          <div className="flex items-center space-x-2">
-                            <Badge variant={teacher.assignedPeriods >= 42 ? "destructive" : "secondary"}>
-                              {teacher.assignedPeriods}/42 periods
-                            </Badge>
-                            <Trash2 
-                              className="w-4 h-4 cursor-pointer hover:text-red-500" 
-                              onClick={() => removeTeacher(teacher.id)}
-                            />
+                    {teachers.map(teacher => {
+                      const maxPeriods = getMaxPeriodsForTeacher(teacher);
+                      return (
+                        <div key={teacher.id} className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-medium">{teacher.name}</div>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={teacher.assignedPeriods >= maxPeriods ? "destructive" : "secondary"}>
+                                {teacher.assignedPeriods}/{maxPeriods} periods
+                              </Badge>
+                              <Trash2 
+                                className="w-4 h-4 cursor-pointer hover:text-red-500" 
+                                onClick={() => removeTeacher(teacher.id)}
+                              />
+                            </div>
                           </div>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-1">
-                          Subjects: {teacher.subjects.join(', ')}
-                        </div>
-                        {teacher.contactInfo && (
-                          <div className="text-sm text-gray-500">
-                            Contact: {teacher.contactInfo}
+                          <div className="text-sm text-gray-600 mb-1">
+                            Subjects: {teacher.subjects.join(', ')} ({teacher.subjects.length} × 42 periods)
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          {teacher.contactInfo && (
+                            <div className="text-sm text-gray-500">
+                              Contact: {teacher.contactInfo}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -498,11 +505,14 @@ const TimetableGenerator = () => {
                                     <SelectValue placeholder="Select teacher" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {availableTeachers.map(teacher => (
-                                      <SelectItem key={teacher.id} value={teacher.id}>
-                                        {teacher.name} ({teacher.assignedPeriods}/42)
-                                      </SelectItem>
-                                    ))}
+                                    {availableTeachers.map(teacher => {
+                                      const maxPeriods = getMaxPeriodsForTeacher(teacher);
+                                      return (
+                                        <SelectItem key={teacher.id} value={teacher.id}>
+                                          {teacher.name} ({teacher.assignedPeriods}/{maxPeriods})
+                                        </SelectItem>
+                                      );
+                                    })}
                                   </SelectContent>
                                 </Select>
                                 {availableTeachers.length === 0 && (
@@ -557,6 +567,7 @@ const TimetableGenerator = () => {
     }
   };
 
+  // ... keep existing code (getStepTitle function and return statement)
   const getStepTitle = () => {
     switch (currentStep) {
       case 1: return 'Step 1: Add Teachers';

@@ -48,7 +48,7 @@ export const useTimetableGeneration = () => {
         });
       });
 
-      // Step 1: Assign class teachers to first periods on ALL working days
+      // Step 1: Assign class teachers to first periods on ALL working days for their assigned class ONLY
       teachers.forEach(teacher => {
         if (teacher.isClassTeacher && teacher.classTeacherOf) {
           const className = teacher.classTeacherOf;
@@ -63,16 +63,15 @@ export const useTimetableGeneration = () => {
             if (teachableSubject) {
               const workingDays = config.includeSaturday ? allDays : days;
               
-              // Assign first period on ALL working days for class teacher with priority
+              // Assign first period on ALL working days for class teacher in their assigned class only
               workingDays.forEach(day => {
                 const periodIndex = 0;
                 
-                // Force place class teacher in first period - skip all constraint checks
-                // This is a priority assignment for class teachers
-                if (state.timetables[className][day][periodIndex] === null && 
-                    state.teacherSchedules[teacher.id][day][periodIndex] === null) {
+                // Check if teacher is already assigned to another class at this time
+                if (state.teacherSchedules[teacher.id][day][periodIndex] === null &&
+                    state.timetables[className][day][periodIndex] === null) {
                   
-                  // Direct assignment without constraint checks for class teachers
+                  // Direct assignment for class teacher in their assigned class
                   state.timetables[className][day][periodIndex] = {
                     subject: teachableSubject.subject,
                     teacher: teacher.name,
@@ -94,7 +93,7 @@ export const useTimetableGeneration = () => {
                   
                   console.log(`✅ Class teacher ${teacher.name} assigned first period on ${day} for ${className} (${teachableSubject.subject})`);
                 } else {
-                  console.log(`❌ Failed to assign class teacher ${teacher.name} on ${day} for ${className} - slot occupied`);
+                  console.log(`❌ Failed to assign class teacher ${teacher.name} on ${day} for ${className} - conflict detected`);
                 }
               });
             } else {
@@ -146,19 +145,17 @@ export const useTimetableGeneration = () => {
               const currentDayCount = state.subjectDayCount[className]?.[assignment.subject]?.[day] || 0;
               if (currentDayCount === 0) {
                 
-                // Find suitable slots (prefer middle periods for activity subjects, skip first period)
+                // Find suitable slots (prefer middle periods for activity subjects)
                 const preferredSlots = [];
                 const middleStart = Math.floor(periodsForDay / 3);
                 const middleEnd = Math.floor((2 * periodsForDay) / 3);
                 
                 for (let period = middleStart; period < middleEnd; period++) {
-                  if (period !== 0) { // Skip first period
-                    preferredSlots.push(period);
-                  }
+                  preferredSlots.push(period);
                 }
                 
-                // Add remaining slots (excluding first period)
-                for (let period = 1; period < periodsForDay; period++) {
+                // Add remaining slots
+                for (let period = 0; period < periodsForDay; period++) {
                   if (!preferredSlots.includes(period)) {
                     preferredSlots.push(period);
                   }
@@ -175,16 +172,15 @@ export const useTimetableGeneration = () => {
             }
           }
 
-          // Strategy 2: Fill remaining periods with improved distribution
+          // Strategy 2: Fill remaining periods with improved distribution and strict conflict checking
           const attempts = [];
           
-          // Create all possible placements (excluding first periods which are reserved for class teachers)
+          // Create all possible placements
           for (let dayIndex = 0; dayIndex < workingDays.length; dayIndex++) {
             const day = workingDays[dayIndex];
             const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
             
-            // Start from period 1 to avoid first period conflicts with class teachers
-            for (let period = 1; period < periodsForDay; period++) {
+            for (let period = 0; period < periodsForDay; period++) {
               attempts.push({ day, period, dayIndex });
             }
           }
@@ -195,11 +191,14 @@ export const useTimetableGeneration = () => {
             [attempts[i], attempts[j]] = [attempts[j], attempts[i]];
           }
 
-          // Place remaining periods
+          // Place remaining periods with strict conflict checking
           for (const attempt of attempts) {
             if (assignedPeriods >= maxPeriods) break;
             
-            if (canPlacePeriod(state, className, attempt.day, attempt.period, assignment.subject, teacher.id, teachers)) {
+            // Enhanced conflict checking - ensure teacher is not assigned to any other class at this time
+            const isTeacherFree = state.teacherSchedules[teacher.id][attempt.day][attempt.period] === null;
+            
+            if (isTeacherFree && canPlacePeriod(state, className, attempt.day, attempt.period, assignment.subject, teacher.id, teachers)) {
               updateScheduleState(state, className, attempt.day, attempt.period, assignment.subject, teacher.id, teacher.name);
               assignedPeriods++;
             }
@@ -238,6 +237,35 @@ export const useTimetableGeneration = () => {
           });
         });
       });
+
+      // Final validation - check for conflicts
+      let hasConflicts = false;
+      teachers.forEach(teacher => {
+        allDays.forEach(day => {
+          const schedule = teacherTimetables[teacher.id][day];
+          schedule.forEach((period, periodIndex) => {
+            if (period) {
+              // Count how many times this teacher appears at this time slot
+              let conflicts = 0;
+              Object.entries(state.timetables).forEach(([className, classTimetable]) => {
+                const slot = classTimetable[day]?.[periodIndex];
+                if (slot && slot.teacherId === teacher.id) {
+                  conflicts++;
+                }
+              });
+              
+              if (conflicts > 1) {
+                console.error(`❌ CONFLICT: Teacher ${teacher.name} assigned to multiple classes at ${day} period ${periodIndex + 1}`);
+                hasConflicts = true;
+              }
+            }
+          });
+        });
+      });
+
+      if (!hasConflicts) {
+        console.log('✅ No teacher conflicts detected across all classes and periods');
+      }
 
       resolve({ 
         timetables: state.timetables, 

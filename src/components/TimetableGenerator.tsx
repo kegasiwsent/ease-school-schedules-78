@@ -30,6 +30,8 @@ interface ClassConfig {
   selectedSubjects: string[];
   subjectAssignments: SubjectAssignment[];
   periodsPerWeek: number; // Total periods per week (Mon-Fri + Sat)
+  weekdayPeriods: number; // Periods per day Monday-Friday
+  saturdayPeriods: number; // Periods on Saturday
   includeSaturday: boolean;
 }
 
@@ -54,7 +56,8 @@ const TimetableGenerator = () => {
   const [currentClass, setCurrentClass] = useState('');
   const [currentDivision, setCurrentDivision] = useState('');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
-  const [periodsPerWeek, setPeriodsPerWeek] = useState(35); // Default 7 periods x 5 days
+  const [weekdayPeriods, setWeekdayPeriods] = useState(7); // Default 7 periods per day Monday-Friday
+  const [saturdayPeriods, setSaturdayPeriods] = useState(4); // Default 4 periods on Saturday
   const [includeSaturday, setIncludeSaturday] = useState(false);
   
   // Step 4: Subject Assignments
@@ -67,6 +70,13 @@ const TimetableGenerator = () => {
   const availableSubjects = ['English', 'Maths', 'SST', 'Hindi', 'Gujarati', 'Computer', 'PE'];
   const classes = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
   const divisions = ['A', 'B', 'C', 'D'];
+
+  // Calculate total periods per week
+  const calculateTotalPeriods = () => {
+    const weekdayTotal = weekdayPeriods * 5; // 5 weekdays
+    const saturdayTotal = includeSaturday ? saturdayPeriods : 0;
+    return weekdayTotal + saturdayTotal;
+  };
 
   // Calculate total assigned periods for current configuration
   const getTotalAssignedPeriods = () => {
@@ -177,6 +187,8 @@ const TimetableGenerator = () => {
   // Step 2-3: Class Configuration
   const handleStartClassConfig = () => {
     if (currentClass && currentDivision) {
+      const totalPeriods = calculateTotalPeriods();
+      
       const existingConfig = classConfigs.find(
         config => config.class === currentClass && config.division === currentDivision
       );
@@ -184,7 +196,8 @@ const TimetableGenerator = () => {
       if (existingConfig) {
         setCurrentConfig(existingConfig);
         setSelectedSubjects(existingConfig.selectedSubjects);
-        setPeriodsPerWeek(existingConfig.periodsPerWeek);
+        setWeekdayPeriods(existingConfig.weekdayPeriods);
+        setSaturdayPeriods(existingConfig.saturdayPeriods);
         setIncludeSaturday(existingConfig.includeSaturday);
       } else {
         const newConfig: ClassConfig = {
@@ -192,7 +205,9 @@ const TimetableGenerator = () => {
           division: currentDivision,
           selectedSubjects: [],
           subjectAssignments: [],
-          periodsPerWeek: periodsPerWeek,
+          periodsPerWeek: totalPeriods,
+          weekdayPeriods: weekdayPeriods,
+          saturdayPeriods: saturdayPeriods,
           includeSaturday: includeSaturday
         };
         setCurrentConfig(newConfig);
@@ -230,7 +245,9 @@ const TimetableGenerator = () => {
 
     const updatedConfig = { ...currentConfig };
     updatedConfig.selectedSubjects = selectedSubjects;
-    updatedConfig.periodsPerWeek = periodsPerWeek;
+    updatedConfig.periodsPerWeek = calculateTotalPeriods();
+    updatedConfig.weekdayPeriods = weekdayPeriods;
+    updatedConfig.saturdayPeriods = saturdayPeriods;
     updatedConfig.includeSaturday = includeSaturday;
     
     const existingAssignment = updatedConfig.subjectAssignments.find(a => a.subject === subject);
@@ -292,7 +309,8 @@ const TimetableGenerator = () => {
     setCurrentClass('');
     setCurrentDivision('');
     setSelectedSubjects([]);
-    setPeriodsPerWeek(35);
+    setWeekdayPeriods(7);
+    setSaturdayPeriods(4);
     setIncludeSaturday(false);
   };
 
@@ -320,7 +338,7 @@ const TimetableGenerator = () => {
         const className = `${config.class}${config.division}`;
         timetables[className] = {};
         allDays.forEach(day => {
-          const periodsForDay = day === 'Saturday' ? 4 : 7; // Saturday has fewer periods
+          const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
           timetables[className][day] = Array(periodsForDay).fill(null);
         });
       });
@@ -330,8 +348,11 @@ const TimetableGenerator = () => {
       teachers.forEach(teacher => {
         teacherSchedules[teacher.id] = {};
         allDays.forEach(day => {
-          const periodsForDay = day === 'Saturday' ? 4 : 7;
-          teacherSchedules[teacher.id][day] = Array(periodsForDay).fill(null);
+          // Use the maximum periods across all classes for teacher scheduling
+          const maxPeriodsForDay = day === 'Saturday' 
+            ? Math.max(...classConfigs.filter(c => c.includeSaturday).map(c => c.saturdayPeriods))
+            : Math.max(...classConfigs.map(c => c.weekdayPeriods));
+          teacherSchedules[teacher.id][day] = Array(maxPeriodsForDay || (day === 'Saturday' ? 4 : 7)).fill(null);
         });
       });
 
@@ -350,7 +371,7 @@ const TimetableGenerator = () => {
           // Try to assign consecutive periods (3-4 periods together)
           for (let dayIndex = 0; dayIndex < workingDays.length && assignedPeriods < maxPeriods; dayIndex++) {
             const day = workingDays[dayIndex];
-            const periodsForDay = day === 'Saturday' ? 4 : 7;
+            const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
             
             // Look for consecutive slots
             for (let startPeriod = 0; startPeriod <= periodsForDay - 3 && assignedPeriods < maxPeriods; startPeriod++) {
@@ -388,7 +409,7 @@ const TimetableGenerator = () => {
           // Fill remaining periods individually if needed
           for (let dayIndex = 0; dayIndex < workingDays.length && assignedPeriods < maxPeriods; dayIndex++) {
             const day = workingDays[dayIndex];
-            const periodsForDay = day === 'Saturday' ? 4 : 7;
+            const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
             
             for (let period = 0; period < periodsForDay && assignedPeriods < maxPeriods; period++) {
               if (
@@ -588,7 +609,7 @@ const TimetableGenerator = () => {
                   <BookOpen className="w-5 h-5" />
                   <span>Class & Division Selection</span>
                 </CardTitle>
-                <CardDescription>Select class, division, and configure periods per week</CardDescription>
+                <CardDescription>Select class, division, and configure periods per day</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -622,25 +643,38 @@ const TimetableGenerator = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="periodsPerWeek">
-                      Periods per Week (Monday-Friday{includeSaturday ? ' + Saturday' : ''}) - Max 42
-                    </Label>
-                    <Input
-                      id="periodsPerWeek"
-                      type="number"
-                      min="1"
-                      max="42"
-                      value={periodsPerWeek}
-                      onChange={(e) => handlePeriodsPerWeekChange(e.target.value)}
-                      placeholder="Enter periods per week"
-                    />
-                    {periodsPerWeek > 42 && (
-                      <div className="flex items-center space-x-2 mt-2 text-red-600">
-                        <AlertCircle className="w-4 h-4" />
-                        <span className="text-sm">Maximum 42 periods allowed per week</span>
-                      </div>
-                    )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="weekdayPeriods">
+                        Periods per Day (Monday - Friday)
+                      </Label>
+                      <Select value={weekdayPeriods.toString()} onValueChange={(value) => setWeekdayPeriods(parseInt(value))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select periods" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[5, 6, 7, 8, 9].map(num => (
+                            <SelectItem key={num} value={num.toString()}>{num} periods</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="saturdayPeriods">
+                        Periods on Saturday
+                      </Label>
+                      <Select value={saturdayPeriods.toString()} onValueChange={(value) => setSaturdayPeriods(parseInt(value))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select periods" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[3, 4, 5, 6, 7].map(num => (
+                            <SelectItem key={num} value={num.toString()}>{num} periods</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   <div className="flex items-center space-x-2">
@@ -649,13 +683,29 @@ const TimetableGenerator = () => {
                       checked={includeSaturday}
                       onCheckedChange={(checked) => setIncludeSaturday(checked as boolean)}
                     />
-                    <Label htmlFor="includeSaturday">Include Saturday (4 periods)</Label>
+                    <Label htmlFor="includeSaturday">Include Saturday</Label>
+                  </div>
+
+                  {/* Period Summary */}
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <div className="font-medium text-blue-900">Total Periods per Week</div>
+                    <div className="text-sm text-blue-700 mt-1">
+                      Monday-Friday: {weekdayPeriods} × 5 = {weekdayPeriods * 5} periods
+                    </div>
+                    {includeSaturday && (
+                      <div className="text-sm text-blue-700">
+                        Saturday: {saturdayPeriods} periods
+                      </div>
+                    )}
+                    <div className="text-lg font-bold text-blue-900 mt-2">
+                      Total: {calculateTotalPeriods()} periods/week
+                    </div>
                   </div>
                 </div>
                 
                 <Button 
                   onClick={handleStartClassConfig}
-                  disabled={!currentClass || !currentDivision || periodsPerWeek <= 0 || periodsPerWeek > 42}
+                  disabled={!currentClass || !currentDivision}
                   className="w-full"
                 >
                   Configure Subjects <ArrowRight className="w-4 h-4 ml-2" />
@@ -676,6 +726,9 @@ const TimetableGenerator = () => {
                         <div className="text-sm text-gray-600">
                           {config.selectedSubjects.length} subjects, {config.periodsPerWeek} periods/week
                           {config.includeSaturday ? ' (incl. Saturday)' : ''}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Weekdays: {config.weekdayPeriods}/day, Saturday: {config.saturdayPeriods}/day
                         </div>
                       </div>
                     ))}

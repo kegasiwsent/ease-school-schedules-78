@@ -46,12 +46,21 @@ const TimetableDisplay = ({ timetables, periodsPerDay, days }: TimetableDisplayP
     return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} - ${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
   };
 
-  const getPeriodsForDay = (day: string) => {
+  const getPeriodsForDay = (day: string, className: string) => {
+    // Get the actual number of periods for this day from the timetable data
+    const classTimetable = timetables[className];
+    if (classTimetable && classTimetable[day]) {
+      return classTimetable[day].length;
+    }
+    // Fallback to default values
     return day === 'Saturday' ? 4 : 7;
   };
 
-  const getMaxPeriods = () => {
-    return Math.max(...days.map(day => getPeriodsForDay(day)));
+  const getMaxPeriods = (className: string) => {
+    const classTimetable = timetables[className];
+    if (!classTimetable) return 7;
+    
+    return Math.max(...days.map(day => getPeriodsForDay(day, className)));
   };
 
   return (
@@ -85,7 +94,7 @@ const TimetableDisplay = ({ timetables, periodsPerDay, days }: TimetableDisplayP
                         <div>
                           <div>{day}</div>
                           <div className="text-xs text-gray-500">
-                            {getPeriodsForDay(day)} periods
+                            {getPeriodsForDay(day, className)} periods
                           </div>
                         </div>
                       </th>
@@ -93,7 +102,7 @@ const TimetableDisplay = ({ timetables, periodsPerDay, days }: TimetableDisplayP
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from({ length: getMaxPeriods() }, (_, periodIndex) => (
+                  {Array.from({ length: getMaxPeriods(className) }, (_, periodIndex) => (
                     <tr key={periodIndex} className="hover:bg-gray-50">
                       <td className="border border-gray-300 p-3 bg-gray-50 font-medium">
                         <div className="text-sm">
@@ -101,7 +110,7 @@ const TimetableDisplay = ({ timetables, periodsPerDay, days }: TimetableDisplayP
                         </div>
                       </td>
                       {days.map(day => {
-                        const periodsForThisDay = getPeriodsForDay(day);
+                        const periodsForThisDay = getPeriodsForDay(day, className);
                         const entry = periodIndex < periodsForThisDay ? classTimetable[day][periodIndex] : undefined;
                         const isValidPeriod = periodIndex < periodsForThisDay;
                         

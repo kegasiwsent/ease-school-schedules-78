@@ -1,3 +1,4 @@
+
 import { useCallback } from 'react';
 import type { Teacher, ClassConfig, ScheduleState, GeneratedTimetables } from '@/types/timetable';
 import { canPlacePeriod, updateScheduleState, activitySubjects } from '@/utils/timetableUtils';
@@ -47,7 +48,35 @@ export const useTimetableGeneration = () => {
         });
       });
 
-      // Generate timetables with enhanced logic
+      // Step 1: Assign class teachers to first periods
+      teachers.forEach(teacher => {
+        if (teacher.isClassTeacher && teacher.classTeacherOf) {
+          const className = teacher.classTeacherOf;
+          const config = classConfigs.find(c => `${c.class}${c.division}` === className);
+          
+          if (config) {
+            // Find a subject this teacher can teach for this class
+            const teachableSubject = config.subjectAssignments.find(
+              assignment => assignment.teacherId === teacher.id
+            );
+            
+            if (teachableSubject) {
+              const workingDays = config.includeSaturday ? allDays : days;
+              
+              // Try to place on Monday first, then other days
+              for (const day of workingDays) {
+                if (canPlacePeriod(state, className, day, 0, teachableSubject.subject, teacher.id, teachers)) {
+                  updateScheduleState(state, className, day, 0, teachableSubject.subject, teacher.id, teacher.name);
+                  console.log(`Class teacher ${teacher.name} assigned first period on ${day} for ${className}`);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // Step 2: Generate timetables with enhanced logic
       classConfigs.forEach(config => {
         const className = `${config.class}${config.division}`;
         const workingDays = config.includeSaturday ? allDays : days;
@@ -65,7 +94,17 @@ export const useTimetableGeneration = () => {
           const teacher = teachers.find(t => t.id === assignment.teacherId);
           if (!teacher) return;
 
+          // Count already assigned periods for this subject (including class teacher period)
           let assignedPeriods = 0;
+          workingDays.forEach(day => {
+            const daySchedule = state.timetables[className][day];
+            daySchedule.forEach(period => {
+              if (period && period.subject === assignment.subject && period.teacherId === teacher.id) {
+                assignedPeriods++;
+              }
+            });
+          });
+
           const maxPeriods = assignment.periodsPerWeek;
           const isActivitySubject = activitySubjects.includes(assignment.subject);
 

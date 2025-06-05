@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, User, Crown } from 'lucide-react';
 import type { ClassConfig, Teacher } from '@/types/timetable';
 
 interface SubjectAssignmentFormProps {
@@ -38,6 +38,14 @@ const SubjectAssignmentForm = ({
 
   const getAvailableTeachers = (subject: string) => {
     return teachers.filter(teacher => teacher.subjects.includes(subject));
+  };
+
+  const getTeacherUsage = (teacherId: string) => {
+    const teacher = teachers.find(t => t.id === teacherId);
+    if (!teacher) return { used: 0, limit: null };
+    
+    const totalUsed = Object.values(teacher.assignedPeriods).reduce((sum, periods) => sum + periods, 0);
+    return { used: totalUsed, limit: teacher.periodLimit };
   };
 
   const exceedsMaxPeriods = () => {
@@ -82,6 +90,39 @@ const SubjectAssignmentForm = ({
               </div>
             )}
           </div>
+
+          {/* Teacher Period Limits Overview */}
+          <Card className="border-orange-200 bg-orange-50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-orange-800">Teacher Period Limits</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                {teachers.map(teacher => {
+                  const usage = getTeacherUsage(teacher.id);
+                  const isOverLimit = usage.limit && usage.used > usage.limit;
+                  const className = `${currentConfig.class}${currentConfig.division}`;
+                  const isClassTeacher = teacher.isClassTeacher && teacher.classTeacherOf === className;
+                  
+                  return (
+                    <div key={teacher.id} className={`flex items-center justify-between p-2 rounded border ${
+                      isOverLimit ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'
+                    }`}>
+                      <div className="flex items-center space-x-2">
+                        {isClassTeacher && <Crown className="w-3 h-3 text-yellow-600" />}
+                        <User className="w-3 h-3 text-gray-500" />
+                        <span className="font-medium">{teacher.name}</span>
+                      </div>
+                      <div className={`text-xs ${isOverLimit ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                        {usage.used}/{usage.limit || '∞'}
+                        {isClassTeacher && <span className="ml-1 text-yellow-600">(CT)</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
 
           <div>
             <Label className="text-base font-medium">Select Subjects</Label>
@@ -142,9 +183,24 @@ const SubjectAssignmentForm = ({
                             <SelectContent>
                               {availableTeachers.map(teacher => {
                                 const assignedForSubject = teacher.assignedPeriods[subject] || 0;
+                                const usage = getTeacherUsage(teacher.id);
+                                const className = `${currentConfig.class}${currentConfig.division}`;
+                                const isClassTeacher = teacher.isClassTeacher && teacher.classTeacherOf === className;
+                                const isOverLimit = usage.limit && usage.used >= usage.limit;
+                                
                                 return (
-                                  <SelectItem key={teacher.id} value={teacher.id}>
-                                    {teacher.name} ({subject}: {assignedForSubject} periods)
+                                  <SelectItem 
+                                    key={teacher.id} 
+                                    value={teacher.id}
+                                    className={isOverLimit ? 'text-red-500' : ''}
+                                  >
+                                    <div className="flex items-center space-x-2">
+                                      {isClassTeacher && <Crown className="w-3 h-3 text-yellow-600" />}
+                                      <span>
+                                        {teacher.name} ({subject}: {assignedForSubject}) 
+                                        [{usage.used}/{usage.limit || '∞'}]
+                                      </span>
+                                    </div>
                                   </SelectItem>
                                 );
                               })}

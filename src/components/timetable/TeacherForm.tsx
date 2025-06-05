@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Users } from 'lucide-react';
+import { Plus, Users, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Teacher } from '@/types/timetable';
 
@@ -14,7 +14,7 @@ interface TeacherFormProps {
   onAddTeacher: (teacher: Teacher) => void;
 }
 
-const availableSubjects = ['English', 'Maths', 'SST', 'Hindi', 'Gujarati', 'Computer', 'PE'];
+const defaultSubjects = ['English', 'Maths', 'SST', 'Hindi', 'Gujarati', 'Computer', 'PE', 'Science', 'Drawing', 'Sanskrit'];
 const availableClasses = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 
 const TeacherForm = ({ teachers, onAddTeacher }: TeacherFormProps) => {
@@ -25,6 +25,36 @@ const TeacherForm = ({ teachers, onAddTeacher }: TeacherFormProps) => {
   const [newTeacherPeriodLimit, setNewTeacherPeriodLimit] = useState<number>(35);
   const [isClassTeacher, setIsClassTeacher] = useState(false);
   const [classTeacherOf, setClassTeacherOf] = useState('');
+  
+  // Custom subjects management
+  const [customSubjects, setCustomSubjects] = useState<string[]>([]);
+  const [newCustomSubject, setNewCustomSubject] = useState('');
+
+  // Combine default and custom subjects
+  const availableSubjects = [...defaultSubjects, ...customSubjects];
+
+  const handleAddCustomSubject = () => {
+    const trimmedSubject = newCustomSubject.trim();
+    if (trimmedSubject && !availableSubjects.includes(trimmedSubject)) {
+      setCustomSubjects(prev => [...prev, trimmedSubject]);
+      setNewCustomSubject('');
+      toast({
+        title: "Subject Added",
+        description: `${trimmedSubject} has been added to available subjects.`,
+      });
+    } else if (availableSubjects.includes(trimmedSubject)) {
+      toast({
+        title: "Subject Already Exists",
+        description: `${trimmedSubject} is already in the subjects list.`,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRemoveCustomSubject = (subject: string) => {
+    setCustomSubjects(prev => prev.filter(s => s !== subject));
+    setNewTeacherSubjects(prev => prev.filter(s => s !== subject));
+  };
 
   const handleAddTeacher = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,17 +131,53 @@ const TeacherForm = ({ teachers, onAddTeacher }: TeacherFormProps) => {
           
           <div>
             <Label>Subjects (Select all that apply)</Label>
+            
+            {/* Add Custom Subject Section */}
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <Label className="text-sm font-medium mb-2 block">Add Custom Subject</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Enter subject name"
+                  value={newCustomSubject}
+                  onChange={(e) => setNewCustomSubject(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCustomSubject())}
+                />
+                <Button 
+                  type="button" 
+                  onClick={handleAddCustomSubject}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 mt-2">
-              {availableSubjects.map(subject => (
-                <div key={subject} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`subject-${subject}`}
-                    checked={newTeacherSubjects.includes(subject)}
-                    onCheckedChange={() => toggleTeacherSubject(subject)}
-                  />
-                  <Label htmlFor={`subject-${subject}`} className="text-sm">{subject}</Label>
-                </div>
-              ))}
+              {availableSubjects.map(subject => {
+                const isCustom = customSubjects.includes(subject);
+                return (
+                  <div key={subject} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`subject-${subject}`}
+                      checked={newTeacherSubjects.includes(subject)}
+                      onCheckedChange={() => toggleTeacherSubject(subject)}
+                    />
+                    <Label htmlFor={`subject-${subject}`} className="text-sm flex-1">{subject}</Label>
+                    {isCustom && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveCustomSubject(subject)}
+                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

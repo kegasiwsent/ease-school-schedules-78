@@ -225,20 +225,6 @@ const TimetableGenerator = () => {
     );
   };
 
-  // Handle periods per week change
-  const handlePeriodsPerWeekChange = (value: string) => {
-    const periods = parseInt(value) || 0;
-    if (periods <= 42) {
-      setPeriodsPerWeek(periods);
-    } else {
-      toast({
-        title: "Maximum Periods Exceeded",
-        description: "Cannot exceed 42 periods per week.",
-        variant: "destructive"
-      });
-    }
-  };
-
   // Step 4: Subject Assignment
   const handleSubjectAssignment = (subject: string, periodsPerWeek: number, teacherId: string) => {
     if (!currentConfig) return;
@@ -897,7 +883,6 @@ const TimetableGenerator = () => {
     }
   };
 
-  // ... keep existing code (getStepTitle function and return statement)
   const getStepTitle = () => {
     switch (currentStep) {
       case 1: return 'Step 1: Add Teachers';

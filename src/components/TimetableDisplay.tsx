@@ -1,9 +1,9 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, Clock, Users, User } from 'lucide-react';
+import { Calendar, Clock, Users, User, Download } from 'lucide-react';
+import { usePDFGenerator } from '@/hooks/usePDFGenerator';
 import TeacherTimetableDisplay from './TeacherTimetableDisplay';
 
 interface TimetableEntry {
@@ -27,6 +27,7 @@ interface TimetableDisplayProps {
 
 const TimetableDisplay = ({ timetables, teacherSchedules, teachers, periodsPerDay, days }: TimetableDisplayProps) => {
   const [activeView, setActiveView] = useState<'classes' | 'teachers'>('classes');
+  const { generateClassTimetablePDF, generateAllTimetablesPDF } = usePDFGenerator();
 
   const getSubjectColor = (subject: string) => {
     const colors = {
@@ -74,14 +75,27 @@ const TimetableDisplay = ({ timetables, teacherSchedules, teachers, periodsPerDa
     return Math.max(...days.map(day => getPeriodsForDay(day, className)));
   };
 
+  const handleDownloadClassPDF = (className: string) => {
+    const classTimetable = timetables[className];
+    if (classTimetable) {
+      const pdf = generateClassTimetablePDF(className, classTimetable, days);
+      pdf.save(`${className}_timetable.pdf`);
+    }
+  };
+
+  const handleDownloadAllPDF = () => {
+    const pdf = generateAllTimetablesPDF(timetables, days);
+    pdf.save('all_class_timetables.pdf');
+  };
+
   return (
     <div className="space-y-8">
       <div className="text-center">
         <h3 className="text-2xl font-bold text-gray-900 mb-2">Generated Timetables</h3>
         <p className="text-gray-600">Optimized schedules with consecutive periods and zero conflicts</p>
         
-        {/* View Toggle */}
-        <div className="flex justify-center mt-4">
+        {/* View Toggle and Download Button */}
+        <div className="flex justify-center items-center mt-4 space-x-4">
           <div className="bg-gray-100 p-1 rounded-lg">
             <Button
               variant={activeView === 'classes' ? 'default' : 'ghost'}
@@ -102,6 +116,17 @@ const TimetableDisplay = ({ timetables, teacherSchedules, teachers, periodsPerDa
               <span>Teacher Timetables</span>
             </Button>
           </div>
+          
+          {activeView === 'classes' && (
+            <Button
+              onClick={handleDownloadAllPDF}
+              className="flex items-center space-x-2"
+              variant="outline"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download All PDFs</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -110,10 +135,21 @@ const TimetableDisplay = ({ timetables, teacherSchedules, teachers, periodsPerDa
           {Object.entries(timetables).map(([className, classTimetable]) => (
             <Card key={className} className="shadow-lg">
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Calendar className="w-5 h-5" />
-                  <span>Timetable for {className}</span>
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center space-x-2">
+                    <Calendar className="w-5 h-5" />
+                    <span>Timetable for {className}</span>
+                  </CardTitle>
+                  <Button
+                    onClick={() => handleDownloadClassPDF(className)}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center space-x-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download PDF</span>
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">

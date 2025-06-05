@@ -48,7 +48,7 @@ export const useTimetableGeneration = () => {
         });
       });
 
-      // Step 1: Assign class teachers to first periods
+      // Step 1: Assign class teachers to first periods on ALL working days
       teachers.forEach(teacher => {
         if (teacher.isClassTeacher && teacher.classTeacherOf) {
           const className = teacher.classTeacherOf;
@@ -63,20 +63,26 @@ export const useTimetableGeneration = () => {
             if (teachableSubject) {
               const workingDays = config.includeSaturday ? allDays : days;
               
-              // Try to place on Monday first, then other days
-              for (const day of workingDays) {
-                if (canPlacePeriod(state, className, day, 0, teachableSubject.subject, teacher.id, teachers)) {
-                  updateScheduleState(state, className, day, 0, teachableSubject.subject, teacher.id, teacher.name);
-                  console.log(`Class teacher ${teacher.name} assigned first period on ${day} for ${className}`);
-                  break;
+              // Assign first period on ALL working days for class teacher
+              workingDays.forEach(day => {
+                // Force place class teacher in first period regardless of other constraints
+                // This is a priority assignment for class teachers
+                const periodIndex = 0;
+                
+                // Check if slot is available
+                if (state.timetables[className][day][periodIndex] === null && 
+                    state.teacherSchedules[teacher.id][day][periodIndex] === null) {
+                  
+                  updateScheduleState(state, className, day, periodIndex, teachableSubject.subject, teacher.id, teacher.name);
+                  console.log(`Class teacher ${teacher.name} assigned first period on ${day} for ${className} (${teachableSubject.subject})`);
                 }
-              }
+              });
             }
           }
         }
       });
 
-      // Step 2: Generate timetables with enhanced logic
+      // Step 2: Generate timetables with enhanced logic for remaining periods
       classConfigs.forEach(config => {
         const className = `${config.class}${config.division}`;
         const workingDays = config.includeSaturday ? allDays : days;
@@ -94,7 +100,7 @@ export const useTimetableGeneration = () => {
           const teacher = teachers.find(t => t.id === assignment.teacherId);
           if (!teacher) return;
 
-          // Count already assigned periods for this subject (including class teacher period)
+          // Count already assigned periods for this subject (including class teacher periods)
           let assignedPeriods = 0;
           workingDays.forEach(day => {
             const daySchedule = state.timetables[className][day];
@@ -118,17 +124,19 @@ export const useTimetableGeneration = () => {
               const currentDayCount = state.subjectDayCount[className]?.[assignment.subject]?.[day] || 0;
               if (currentDayCount === 0) {
                 
-                // Find suitable slots (prefer middle periods for activity subjects)
+                // Find suitable slots (prefer middle periods for activity subjects, skip first period)
                 const preferredSlots = [];
                 const middleStart = Math.floor(periodsForDay / 3);
                 const middleEnd = Math.floor((2 * periodsForDay) / 3);
                 
                 for (let period = middleStart; period < middleEnd; period++) {
-                  preferredSlots.push(period);
+                  if (period !== 0) { // Skip first period
+                    preferredSlots.push(period);
+                  }
                 }
                 
-                // Add remaining slots
-                for (let period = 0; period < periodsForDay; period++) {
+                // Add remaining slots (excluding first period)
+                for (let period = 1; period < periodsForDay; period++) {
                   if (!preferredSlots.includes(period)) {
                     preferredSlots.push(period);
                   }
@@ -148,12 +156,13 @@ export const useTimetableGeneration = () => {
           // Strategy 2: Fill remaining periods with improved distribution
           const attempts = [];
           
-          // Create all possible placements
+          // Create all possible placements (excluding first periods which are reserved for class teachers)
           for (let dayIndex = 0; dayIndex < workingDays.length; dayIndex++) {
             const day = workingDays[dayIndex];
             const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
             
-            for (let period = 0; period < periodsForDay; period++) {
+            // Start from period 1 to avoid first period conflicts with class teachers
+            for (let period = 1; period < periodsForDay; period++) {
               attempts.push({ day, period, dayIndex });
             }
           }

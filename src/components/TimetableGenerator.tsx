@@ -35,6 +35,20 @@ interface ClassConfig {
   includeSaturday: boolean;
 }
 
+interface PeriodSlot {
+  subject: string;
+  teacher: string;
+  teacherId: string;
+}
+
+interface ScheduleState {
+  timetables: { [className: string]: { [day: string]: (PeriodSlot | null)[] } };
+  teacherSchedules: { [teacherId: string]: { [day: string]: (string | null)[] } };
+  subjectLastPlaced: { [className: string]: { [subject: string]: { [day: string]: number } } };
+  teacherConsecutive: { [teacherId: string]: { [day: string]: number } };
+  subjectDayCount: { [className: string]: { [subject: string]: { [day: string]: number } } };
+}
+
 const TimetableGenerator = () => {
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
@@ -71,6 +85,9 @@ const TimetableGenerator = () => {
   const classes = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
   const divisions = ['A', 'B', 'C', 'D'];
 
+  // Activity subjects that should be distributed
+  const activitySubjects = ['PE', 'Computer', 'SST'];
+
   // Calculate total periods per week
   const calculateTotalPeriods = () => {
     const weekdayTotal = weekdayPeriods * 5; // 5 weekdays
@@ -99,6 +116,113 @@ const TimetableGenerator = () => {
   // Helper function to check if teacher can take more periods for a subject
   const canTeacherTakeSubject = (teacher: Teacher, subject: string) => {
     return teacher.subjects.includes(subject);
+  };
+
+  // Enhanced scheduling constraints
+  const canPlacePeriod = (
+    state: ScheduleState,
+    className: string,
+    day: string,
+    period: number,
+    subject: string,
+    teacherId: string
+  ): boolean => {
+    // Check if slot is already occupied
+    if (state.timetables[className][day][period] !== null) return false;
+    if (state.teacherSchedules[teacherId][day][period] !== null) return false;
+
+    // Check teacher fatigue - no more than 2 consecutive periods
+    const teacherConsecutiveCount = state.teacherConsecutive[teacherId]?.[day] || 0;
+    if (teacherConsecutiveCount >= 2) {
+      // Teacher needs a break - check if previous period was free
+      if (period > 0 && state.teacherSchedules[teacherId][day][period - 1] !== null) {
+        return false;
+      }
+    }
+
+    // Check subject consecutive periods - max 2 per day
+    let consecutiveSubjectCount = 0;
+    
+    // Count consecutive periods before this slot
+    for (let p = period - 1; p >= 0; p--) {
+      const slot = state.timetables[className][day][p];
+      if (slot && slot.subject === subject) {
+        consecutiveSubjectCount++;
+      } else {
+        break;
+      }
+    }
+    
+    // Count consecutive periods after this slot
+    for (let p = period + 1; p < state.timetables[className][day].length; p++) {
+      const slot = state.timetables[className][day][p];
+      if (slot && slot.subject === subject) {
+        consecutiveSubjectCount++;
+      } else {
+        break;
+      }
+    }
+
+    if (consecutiveSubjectCount >= 2) return false;
+
+    // Check minimum gap rule - skip at least one period before placing same subject again
+    const lastPlaced = state.subjectLastPlaced[className]?.[subject]?.[day] ?? -2;
+    if (lastPlaced !== -2 && period - lastPlaced < 2) {
+      // Only allow if we're placing the second consecutive period
+      if (period - lastPlaced !== 1) return false;
+      
+      // Check if this would create more than 2 consecutive
+      if (period + 1 < state.timetables[className][day].length) {
+        const nextSlot = state.timetables[className][day][period + 1];
+        if (nextSlot && nextSlot.subject === subject) return false;
+      }
+    }
+
+    return true;
+  };
+
+  const updateScheduleState = (
+    state: ScheduleState,
+    className: string,
+    day: string,
+    period: number,
+    subject: string,
+    teacherId: string,
+    teacherName: string
+  ): void => {
+    // Place the period
+    state.timetables[className][day][period] = {
+      subject,
+      teacher: teacherName,
+      teacherId
+    };
+    state.teacherSchedules[teacherId][day][period] = className;
+
+    // Update tracking
+    if (!state.subjectLastPlaced[className]) state.subjectLastPlaced[className] = {};
+    if (!state.subjectLastPlaced[className][subject]) state.subjectLastPlaced[className][subject] = {};
+    state.subjectLastPlaced[className][subject][day] = period;
+
+    if (!state.subjectDayCount[className]) state.subjectDayCount[className] = {};
+    if (!state.subjectDayCount[className][subject]) state.subjectDayCount[className][subject] = {};
+    state.subjectDayCount[className][subject][day] = (state.subjectDayCount[className][subject][day] || 0) + 1;
+
+    // Update teacher consecutive count
+    if (!state.teacherConsecutive[teacherId]) state.teacherConsecutive[teacherId] = {};
+    if (!state.teacherConsecutive[teacherId][day]) state.teacherConsecutive[teacherId][day] = 0;
+    
+    // Check if this extends a consecutive sequence
+    if (period > 0 && state.teacherSchedules[teacherId][day][period - 1] !== null) {
+      state.teacherConsecutive[teacherId][day]++;
+    } else {
+      state.teacherConsecutive[teacherId][day] = 1;
+    }
+
+    // Reset consecutive count if there's a gap after this period
+    if (period + 1 < state.teacherSchedules[teacherId][day].length && 
+        state.teacherSchedules[teacherId][day][period + 1] === null) {
+      state.teacherConsecutive[teacherId][day] = 0;
+    }
   };
 
   // Step 1: Teacher Management
@@ -309,7 +433,6 @@ const TimetableGenerator = () => {
     setIsGenerating(true);
     
     setTimeout(() => {
-      const timetables: any = {};
       const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
       const allDays = [...days];
       
@@ -319,109 +442,135 @@ const TimetableGenerator = () => {
         allDays.push('Saturday');
       }
 
+      // Initialize schedule state
+      const state: ScheduleState = {
+        timetables: {},
+        teacherSchedules: {},
+        subjectLastPlaced: {},
+        teacherConsecutive: {},
+        subjectDayCount: {}
+      };
+
       // Initialize timetables
       classConfigs.forEach(config => {
         const className = `${config.class}${config.division}`;
-        timetables[className] = {};
+        state.timetables[className] = {};
         allDays.forEach(day => {
           const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
-          timetables[className][day] = Array(periodsForDay).fill(null);
+          state.timetables[className][day] = Array(periodsForDay).fill(null);
         });
       });
 
-      // Track teacher schedules
-      const teacherSchedules: any = {};
+      // Initialize teacher schedules
       teachers.forEach(teacher => {
-        teacherSchedules[teacher.id] = {};
+        state.teacherSchedules[teacher.id] = {};
         allDays.forEach(day => {
-          // Use the maximum periods across all classes for teacher scheduling
           const maxPeriodsForDay = day === 'Saturday' 
             ? Math.max(...classConfigs.filter(c => c.includeSaturday).map(c => c.saturdayPeriods))
             : Math.max(...classConfigs.map(c => c.weekdayPeriods));
-          teacherSchedules[teacher.id][day] = Array(maxPeriodsForDay || (day === 'Saturday' ? 4 : 7)).fill(null);
+          state.teacherSchedules[teacher.id][day] = Array(maxPeriodsForDay || (day === 'Saturday' ? 4 : 7)).fill(null);
         });
       });
 
-      // Generate timetables with consecutive class logic
+      // Generate timetables with enhanced logic
       classConfigs.forEach(config => {
         const className = `${config.class}${config.division}`;
         const workingDays = config.includeSaturday ? allDays : days;
         
-        config.subjectAssignments.forEach(assignment => {
+        // Sort assignments by priority (activity subjects first for better distribution)
+        const sortedAssignments = [...config.subjectAssignments].sort((a, b) => {
+          const aIsActivity = activitySubjects.includes(a.subject);
+          const bIsActivity = activitySubjects.includes(b.subject);
+          if (aIsActivity && !bIsActivity) return -1;
+          if (!aIsActivity && bIsActivity) return 1;
+          return 0;
+        });
+
+        sortedAssignments.forEach(assignment => {
           const teacher = teachers.find(t => t.id === assignment.teacherId);
           if (!teacher) return;
 
           let assignedPeriods = 0;
           const maxPeriods = assignment.periodsPerWeek;
+          const isActivitySubject = activitySubjects.includes(assignment.subject);
 
-          // Try to assign consecutive periods (3-4 periods together)
-          for (let dayIndex = 0; dayIndex < workingDays.length && assignedPeriods < maxPeriods; dayIndex++) {
-            const day = workingDays[dayIndex];
-            const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
-            
-            // Look for consecutive slots
-            for (let startPeriod = 0; startPeriod <= periodsForDay - 3 && assignedPeriods < maxPeriods; startPeriod++) {
-              // Check if we can place 3-4 consecutive periods
-              const consecutivePeriods = Math.min(4, maxPeriods - assignedPeriods, periodsForDay - startPeriod);
+          // Strategy 1: Distribute activity subjects across different days first
+          if (isActivitySubject) {
+            for (let dayIndex = 0; dayIndex < workingDays.length && assignedPeriods < maxPeriods; dayIndex++) {
+              const day = workingDays[dayIndex];
+              const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
               
-              // Check if all slots are available
-              let canPlaceConsecutive = true;
-              for (let i = 0; i < consecutivePeriods; i++) {
-                if (
-                  timetables[className][day][startPeriod + i] !== null ||
-                  teacherSchedules[teacher.id][day][startPeriod + i] !== null
-                ) {
-                  canPlaceConsecutive = false;
-                  break;
+              // Try to place one period per day for activity subjects
+              const currentDayCount = state.subjectDayCount[className]?.[assignment.subject]?.[day] || 0;
+              if (currentDayCount === 0) { // Only if not already placed on this day
+                
+                // Find suitable slots (prefer middle periods for activity subjects)
+                const preferredSlots = [];
+                const middleStart = Math.floor(periodsForDay / 3);
+                const middleEnd = Math.floor((2 * periodsForDay) / 3);
+                
+                for (let period = middleStart; period < middleEnd; period++) {
+                  preferredSlots.push(period);
                 }
-              }
+                
+                // Add remaining slots
+                for (let period = 0; period < periodsForDay; period++) {
+                  if (!preferredSlots.includes(period)) {
+                    preferredSlots.push(period);
+                  }
+                }
 
-              // Place consecutive periods if possible
-              if (canPlaceConsecutive && consecutivePeriods >= 3) {
-                for (let i = 0; i < consecutivePeriods; i++) {
-                  timetables[className][day][startPeriod + i] = {
-                    subject: assignment.subject,
-                    teacher: teacher.name,
-                    teacherId: teacher.id
-                  };
-                  teacherSchedules[teacher.id][day][startPeriod + i] = className;
-                  assignedPeriods++;
+                for (const period of preferredSlots) {
+                  if (canPlacePeriod(state, className, day, period, assignment.subject, teacher.id)) {
+                    updateScheduleState(state, className, day, period, assignment.subject, teacher.id, teacher.name);
+                    assignedPeriods++;
+                    break;
+                  }
                 }
-                break; // Move to next day
               }
             }
           }
 
-          // Fill remaining periods individually if needed
-          for (let dayIndex = 0; dayIndex < workingDays.length && assignedPeriods < maxPeriods; dayIndex++) {
+          // Strategy 2: Fill remaining periods with improved distribution
+          const attempts = [];
+          
+          // Create all possible placements
+          for (let dayIndex = 0; dayIndex < workingDays.length; dayIndex++) {
             const day = workingDays[dayIndex];
             const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
             
-            for (let period = 0; period < periodsForDay && assignedPeriods < maxPeriods; period++) {
-              if (
-                timetables[className][day][period] === null &&
-                teacherSchedules[teacher.id][day][period] === null
-              ) {
-                timetables[className][day][period] = {
-                  subject: assignment.subject,
-                  teacher: teacher.name,
-                  teacherId: teacher.id
-                };
-                teacherSchedules[teacher.id][day][period] = className;
-                assignedPeriods++;
-              }
+            for (let period = 0; period < periodsForDay; period++) {
+              attempts.push({ day, period, dayIndex });
             }
           }
+
+          // Shuffle attempts for better distribution
+          for (let i = attempts.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [attempts[i], attempts[j]] = [attempts[j], attempts[i]];
+          }
+
+          // Place remaining periods
+          for (const attempt of attempts) {
+            if (assignedPeriods >= maxPeriods) break;
+            
+            if (canPlacePeriod(state, className, attempt.day, attempt.period, assignment.subject, teacher.id)) {
+              updateScheduleState(state, className, attempt.day, attempt.period, assignment.subject, teacher.id, teacher.name);
+              assignedPeriods++;
+            }
+          }
+
+          console.log(`${className} - ${assignment.subject}: Assigned ${assignedPeriods}/${maxPeriods} periods`);
         });
       });
 
-      setGeneratedTimetables({ timetables, days: allDays });
+      setGeneratedTimetables({ timetables: state.timetables, days: allDays });
       setIsGenerating(false);
       setCurrentStep(5);
       
       toast({
-        title: "Timetables Generated! 🎉",
-        description: `Successfully generated timetables for ${classConfigs.length} classes with optimized consecutive periods.`,
+        title: "Enhanced Timetables Generated! 🎉",
+        description: `Successfully generated optimized timetables with improved distribution and constraints.`,
       });
     }, 2000);
   };

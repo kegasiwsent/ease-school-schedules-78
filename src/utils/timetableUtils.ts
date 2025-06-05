@@ -10,11 +10,24 @@ export const canPlacePeriod = (
   day: string,
   period: number,
   subject: string,
-  teacherId: string
+  teacherId: string,
+  teachers: Teacher[]
 ): boolean => {
   // Check if slot is already occupied
   if (state.timetables[className][day][period] !== null) return false;
   if (state.teacherSchedules[teacherId][day][period] !== null) return false;
+
+  // Check teacher period limit
+  const teacher = teachers.find(t => t.id === teacherId);
+  if (teacher && teacher.periodLimit) {
+    const currentTotalPeriods = Object.values(state.teacherSchedules[teacherId])
+      .flat()
+      .filter(slot => slot !== null).length;
+    
+    if (currentTotalPeriods >= teacher.periodLimit) {
+      return false;
+    }
+  }
 
   // Check teacher fatigue - no more than 2 consecutive periods
   const teacherConsecutiveCount = state.teacherConsecutive[teacherId]?.[day] || 0;

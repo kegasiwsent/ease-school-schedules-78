@@ -1,10 +1,12 @@
-
 export interface Teacher {
   id: string;
   name: string;
   subjects: string[];
   contactInfo?: string;
   assignedPeriods: { [subject: string]: number };
+  periodLimit?: number;
+  isClassTeacher: boolean;
+  classTeacherOf?: string;
 }
 
 export interface SubjectAssignment {

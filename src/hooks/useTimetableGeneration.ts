@@ -1,4 +1,3 @@
-
 import { useCallback } from 'react';
 import type { Teacher, ClassConfig, ScheduleState, GeneratedTimetables } from '@/types/timetable';
 import { canPlacePeriod, updateScheduleState, activitySubjects } from '@/utils/timetableUtils';
@@ -97,7 +96,7 @@ export const useTimetableGeneration = () => {
                 }
 
                 for (const period of preferredSlots) {
-                  if (canPlacePeriod(state, className, day, period, assignment.subject, teacher.id)) {
+                  if (canPlacePeriod(state, className, day, period, assignment.subject, teacher.id, teachers)) {
                     updateScheduleState(state, className, day, period, assignment.subject, teacher.id, teacher.name);
                     assignedPeriods++;
                     break;
@@ -130,13 +129,13 @@ export const useTimetableGeneration = () => {
           for (const attempt of attempts) {
             if (assignedPeriods >= maxPeriods) break;
             
-            if (canPlacePeriod(state, className, attempt.day, attempt.period, assignment.subject, teacher.id)) {
+            if (canPlacePeriod(state, className, attempt.day, attempt.period, assignment.subject, teacher.id, teachers)) {
               updateScheduleState(state, className, attempt.day, attempt.period, assignment.subject, teacher.id, teacher.name);
               assignedPeriods++;
             }
           }
 
-          console.log(`${className} - ${assignment.subject}: Assigned ${assignedPeriods}/${maxPeriods} periods`);
+          console.log(`${className} - ${assignment.subject}: Assigned ${assignedPeriods}/${maxPeriods} periods (Teacher: ${teacher.name}, Limit: ${teacher.periodLimit || 'No limit'})`);
         });
       });
 

@@ -1,8 +1,10 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Calendar, Clock, Users, User } from 'lucide-react';
+import TeacherTimetableDisplay from './TeacherTimetableDisplay';
 
 interface TimetableEntry {
   subject: string;
@@ -10,13 +12,22 @@ interface TimetableEntry {
   teacherId: string;
 }
 
+interface TeacherScheduleEntry {
+  class: string;
+  subject: string;
+}
+
 interface TimetableDisplayProps {
   timetables: { [className: string]: { [day: string]: (TimetableEntry | null)[] } };
+  teacherSchedules?: { [teacherId: string]: { [day: string]: (TeacherScheduleEntry | null)[] } };
+  teachers?: { id: string; name: string; subjects: string[] }[];
   periodsPerDay: number;
   days: string[];
 }
 
-const TimetableDisplay = ({ timetables, periodsPerDay, days }: TimetableDisplayProps) => {
+const TimetableDisplay = ({ timetables, teacherSchedules, teachers, periodsPerDay, days }: TimetableDisplayProps) => {
+  const [activeView, setActiveView] = useState<'classes' | 'teachers'>('classes');
+
   const getSubjectColor = (subject: string) => {
     const colors = {
       'English': 'bg-purple-100 text-purple-800 border-purple-200',
@@ -68,116 +79,152 @@ const TimetableDisplay = ({ timetables, periodsPerDay, days }: TimetableDisplayP
       <div className="text-center">
         <h3 className="text-2xl font-bold text-gray-900 mb-2">Generated Timetables</h3>
         <p className="text-gray-600">Optimized schedules with consecutive periods and zero conflicts</p>
+        
+        {/* View Toggle */}
+        <div className="flex justify-center mt-4">
+          <div className="bg-gray-100 p-1 rounded-lg">
+            <Button
+              variant={activeView === 'classes' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveView('classes')}
+              className="flex items-center space-x-2"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Class Timetables</span>
+            </Button>
+            <Button
+              variant={activeView === 'teachers' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveView('teachers')}
+              className="flex items-center space-x-2"
+            >
+              <Users className="w-4 h-4" />
+              <span>Teacher Timetables</span>
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {Object.entries(timetables).map(([className, classTimetable]) => (
-        <Card key={className} className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5" />
-              <span>Timetable for {className}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr>
-                    <th className="border border-gray-300 bg-gray-50 p-3 text-left font-medium">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>Time / Day</span>
-                      </div>
-                    </th>
-                    {days.map(day => (
-                      <th key={day} className="border border-gray-300 bg-gray-50 p-3 text-center font-medium min-w-[150px]">
-                        <div>
-                          <div>{day}</div>
-                          <div className="text-xs text-gray-500">
-                            {getPeriodsForDay(day, className)} periods
+      {activeView === 'classes' && (
+        <div className="space-y-8">
+          {Object.entries(timetables).map(([className, classTimetable]) => (
+            <Card key={className} className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Calendar className="w-5 h-5" />
+                  <span>Timetable for {className}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="border border-gray-300 bg-gray-50 p-3 text-left font-medium">
+                          <div className="flex items-center space-x-2">
+                            <Clock className="w-4 h-4" />
+                            <span>Time / Day</span>
                           </div>
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.from({ length: getMaxPeriods(className) }, (_, periodIndex) => (
-                    <tr key={periodIndex} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 p-3 bg-gray-50 font-medium">
-                        <div className="text-sm">
-                          <div>Period {periodIndex + 1}</div>
-                        </div>
-                      </td>
-                      {days.map(day => {
-                        const periodsForThisDay = getPeriodsForDay(day, className);
-                        const entry = periodIndex < periodsForThisDay ? classTimetable[day][periodIndex] : undefined;
-                        const isValidPeriod = periodIndex < periodsForThisDay;
-                        
-                        return (
-                          <td key={day} className={`border border-gray-300 p-2 ${!isValidPeriod ? 'bg-gray-100' : ''}`}>
-                            {!isValidPeriod ? (
-                              <div className="text-center text-gray-400 text-sm">
-                                —
+                        </th>
+                        {days.map(day => (
+                          <th key={day} className="border border-gray-300 bg-gray-50 p-3 text-center font-medium min-w-[150px]">
+                            <div>
+                              <div>{day}</div>
+                              <div className="text-xs text-gray-500">
+                                {getPeriodsForDay(day, className)} periods
                               </div>
-                            ) : entry ? (
-                              <div className="space-y-1">
-                                <Badge 
-                                  variant="outline" 
-                                  className={`${getSubjectColor(entry.subject)} w-full justify-center text-xs font-medium`}
-                                >
-                                  {entry.subject}
-                                </Badge>
-                                <div className="text-xs text-gray-600 text-center">
-                                  {entry.teacher}
-                                </div>
-                                <div className="text-xs text-gray-500 text-center">
-                                  {getPeriodTime(periodIndex, day)}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-center text-gray-400 text-sm">
-                                <div>Free Period</div>
-                                <div className="text-xs text-gray-500">
-                                  {getPeriodTime(periodIndex, day)}
-                                </div>
-                              </div>
-                            )}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: getMaxPeriods(className) }, (_, periodIndex) => (
+                        <tr key={periodIndex} className="hover:bg-gray-50">
+                          <td className="border border-gray-300 p-3 bg-gray-50 font-medium">
+                            <div className="text-sm">
+                              <div>Period {periodIndex + 1}</div>
+                            </div>
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* Legend */}
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-medium text-gray-900 mb-3">Subject Legend</h4>
-              <div className="flex flex-wrap gap-2">
-                {['English', 'Maths', 'SST', 'Hindi', 'Gujarati', 'Computer', 'PE'].map(subject => (
-                  <Badge 
-                    key={subject}
-                    variant="outline" 
-                    className={`${getSubjectColor(subject)} text-xs`}
-                  >
-                    {subject}
-                  </Badge>
-                ))}
-              </div>
-              <div className="mt-3 text-sm text-gray-600">
-                <div className="font-medium mb-1">Features:</div>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>3-4 consecutive periods for the same teacher when possible</li>
-                  <li>Zero teacher conflicts across all classes</li>
-                  <li>Optimized distribution across all weekdays{days.includes('Saturday') ? ' and Saturday' : ''}</li>
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+                          {days.map(day => {
+                            const periodsForThisDay = getPeriodsForDay(day, className);
+                            const entry = periodIndex < periodsForThisDay ? classTimetable[day][periodIndex] : undefined;
+                            const isValidPeriod = periodIndex < periodsForThisDay;
+                            
+                            return (
+                              <td key={day} className={`border border-gray-300 p-2 ${!isValidPeriod ? 'bg-gray-100' : ''}`}>
+                                {!isValidPeriod ? (
+                                  <div className="text-center text-gray-400 text-sm">
+                                    —
+                                  </div>
+                                ) : entry ? (
+                                  <div className="space-y-1">
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`${getSubjectColor(entry.subject)} w-full justify-center text-xs font-medium`}
+                                    >
+                                      {entry.subject}
+                                    </Badge>
+                                    <div className="text-xs text-gray-600 text-center">
+                                      {entry.teacher}
+                                    </div>
+                                    <div className="text-xs text-gray-500 text-center">
+                                      {getPeriodTime(periodIndex, day)}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-center text-gray-400 text-sm">
+                                    <div>Free Period</div>
+                                    <div className="text-xs text-gray-500">
+                                      {getPeriodTime(periodIndex, day)}
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Legend */}
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-900 mb-3">Subject Legend</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {['English', 'Maths', 'SST', 'Hindi', 'Gujarati', 'Computer', 'PE'].map(subject => (
+                      <Badge 
+                        key={subject}
+                        variant="outline" 
+                        className={`${getSubjectColor(subject)} text-xs`}
+                      >
+                        {subject}
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-sm text-gray-600">
+                    <div className="font-medium mb-1">Features:</div>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>3-4 consecutive periods for the same teacher when possible</li>
+                      <li>Zero teacher conflicts across all classes</li>
+                      <li>Optimized distribution across all weekdays{days.includes('Saturday') ? ' and Saturday' : ''}</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {activeView === 'teachers' && teacherSchedules && teachers && (
+        <TeacherTimetableDisplay 
+          teacherSchedules={teacherSchedules}
+          teachers={teachers}
+          days={days}
+        />
+      )}
     </div>
   );
 };

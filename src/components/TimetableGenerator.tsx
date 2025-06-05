@@ -564,13 +564,47 @@ const TimetableGenerator = () => {
         });
       });
 
-      setGeneratedTimetables({ timetables: state.timetables, days: allDays });
+      // Generate teacher-specific timetables from the class timetables
+      const teacherTimetables: { [teacherId: string]: { [day: string]: ({ class: string; subject: string } | null)[] } } = {};
+      
+      teachers.forEach(teacher => {
+        teacherTimetables[teacher.id] = {};
+        allDays.forEach(day => {
+          const maxPeriodsForDay = day === 'Saturday' 
+            ? Math.max(...classConfigs.filter(c => c.includeSaturday).map(c => c.saturdayPeriods))
+            : Math.max(...classConfigs.map(c => c.weekdayPeriods));
+          teacherTimetables[teacher.id][day] = Array(maxPeriodsForDay || (day === 'Saturday' ? 4 : 7)).fill(null);
+        });
+      });
+
+      // Populate teacher timetables from class schedules
+      Object.entries(state.timetables).forEach(([className, classTimetable]) => {
+        Object.entries(classTimetable).forEach(([day, daySchedule]) => {
+          daySchedule.forEach((period, periodIndex) => {
+            if (period) {
+              const teacherId = period.teacherId;
+              if (teacherTimetables[teacherId] && teacherTimetables[teacherId][day]) {
+                teacherTimetables[teacherId][day][periodIndex] = {
+                  class: className,
+                  subject: period.subject
+                };
+              }
+            }
+          });
+        });
+      });
+
+      setGeneratedTimetables({ 
+        timetables: state.timetables, 
+        teacherSchedules: teacherTimetables,
+        days: allDays 
+      });
       setIsGenerating(false);
       setCurrentStep(5);
       
       toast({
         title: "Enhanced Timetables Generated! 🎉",
-        description: `Successfully generated optimized timetables with improved distribution and constraints.`,
+        description: `Successfully generated optimized timetables for classes and teachers with personal time.`,
       });
     }, 2000);
   };
@@ -1019,7 +1053,9 @@ const TimetableGenerator = () => {
           <div className="space-y-6">
             {generatedTimetables && (
               <TimetableDisplay 
-                timetables={generatedTimetables.timetables} 
+                timetables={generatedTimetables.timetables}
+                teacherSchedules={generatedTimetables.teacherSchedules}
+                teachers={teachers}
                 periodsPerDay={7}
                 days={generatedTimetables.days}
               />

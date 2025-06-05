@@ -63,20 +63,42 @@ export const useTimetableGeneration = () => {
             if (teachableSubject) {
               const workingDays = config.includeSaturday ? allDays : days;
               
-              // Assign first period on ALL working days for class teacher
+              // Assign first period on ALL working days for class teacher with priority
               workingDays.forEach(day => {
-                // Force place class teacher in first period regardless of other constraints
-                // This is a priority assignment for class teachers
                 const periodIndex = 0;
                 
-                // Check if slot is available
+                // Force place class teacher in first period - skip all constraint checks
+                // This is a priority assignment for class teachers
                 if (state.timetables[className][day][periodIndex] === null && 
                     state.teacherSchedules[teacher.id][day][periodIndex] === null) {
                   
-                  updateScheduleState(state, className, day, periodIndex, teachableSubject.subject, teacher.id, teacher.name);
-                  console.log(`Class teacher ${teacher.name} assigned first period on ${day} for ${className} (${teachableSubject.subject})`);
+                  // Direct assignment without constraint checks for class teachers
+                  state.timetables[className][day][periodIndex] = {
+                    subject: teachableSubject.subject,
+                    teacher: teacher.name,
+                    teacherId: teacher.id
+                  };
+                  state.teacherSchedules[teacher.id][day][periodIndex] = className;
+                  
+                  // Update tracking for class teacher assignments
+                  if (!state.subjectLastPlaced[className]) state.subjectLastPlaced[className] = {};
+                  if (!state.subjectLastPlaced[className][teachableSubject.subject]) state.subjectLastPlaced[className][teachableSubject.subject] = {};
+                  state.subjectLastPlaced[className][teachableSubject.subject][day] = periodIndex;
+
+                  if (!state.subjectDayCount[className]) state.subjectDayCount[className] = {};
+                  if (!state.subjectDayCount[className][teachableSubject.subject]) state.subjectDayCount[className][teachableSubject.subject] = {};
+                  state.subjectDayCount[className][teachableSubject.subject][day] = (state.subjectDayCount[className][teachableSubject.subject][day] || 0) + 1;
+
+                  if (!state.teacherConsecutive[teacher.id]) state.teacherConsecutive[teacher.id] = {};
+                  state.teacherConsecutive[teacher.id][day] = 1;
+                  
+                  console.log(`✅ Class teacher ${teacher.name} assigned first period on ${day} for ${className} (${teachableSubject.subject})`);
+                } else {
+                  console.log(`❌ Failed to assign class teacher ${teacher.name} on ${day} for ${className} - slot occupied`);
                 }
               });
+            } else {
+              console.log(`❌ Class teacher ${teacher.name} has no teachable subjects for ${className}`);
             }
           }
         }

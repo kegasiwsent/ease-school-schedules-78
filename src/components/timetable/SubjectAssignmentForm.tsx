@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, AlertCircle, User, Crown } from 'lucide-react';
+import { getAllAvailableSubjects } from '@/utils/subjectUtils';
 import type { ClassConfig, Teacher } from '@/types/timetable';
 
 interface SubjectAssignmentFormProps {
@@ -19,8 +19,6 @@ interface SubjectAssignmentFormProps {
   onBack: () => void;
 }
 
-const availableSubjects = ['English', 'Maths', 'SST', 'Hindi', 'Gujarati', 'Computer', 'PE'];
-
 const SubjectAssignmentForm = ({
   currentConfig,
   selectedSubjects,
@@ -31,6 +29,9 @@ const SubjectAssignmentForm = ({
   onBack
 }: SubjectAssignmentFormProps) => {
   if (!currentConfig) return null;
+
+  // Get all available subjects from teachers (including custom ones)
+  const availableSubjects = getAllAvailableSubjects(teachers);
 
   const getTotalAssignedPeriods = () => {
     return currentConfig.subjectAssignments.reduce((total, assignment) => total + assignment.periodsPerWeek, 0);

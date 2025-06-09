@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -44,19 +43,26 @@ export const useTeachers = () => {
 
   const saveTeacher = async (teacher: Teacher) => {
     try {
+      console.log('Saving teacher:', teacher);
+      
       const { error } = await supabase
         .from('teachers')
         .insert({
-          id: teacher.id,
           name: teacher.name,
           subjects: teacher.subjects,
-          contact_info: teacher.contactInfo,
-          period_limit: teacher.periodLimit,
-          is_class_teacher: teacher.isClassTeacher,
-          class_teacher_of: teacher.classTeacherOf
+          contact_info: teacher.contactInfo || null,
+          period_limit: teacher.periodLimit || 35,
+          is_class_teacher: teacher.isClassTeacher || false,
+          class_teacher_of: teacher.classTeacherOf || null
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      // Add to local state
+      await loadTeachers();
 
       toast({
         title: "Teacher Saved",
@@ -66,7 +72,7 @@ export const useTeachers = () => {
       console.error('Error saving teacher:', error);
       toast({
         title: "Error",
-        description: "Failed to save teacher to database",
+        description: `Failed to save teacher to database: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     }

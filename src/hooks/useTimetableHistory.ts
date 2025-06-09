@@ -63,7 +63,7 @@ export const useTimetableHistory = () => {
       const { error } = await supabase
         .from('timetable_history')
         .insert({
-          name,
+          name: name,
           timetable_data: timetables.timetables,
           teacher_schedules: timetables.teacherSchedules,
           class_configs: classConfigs,

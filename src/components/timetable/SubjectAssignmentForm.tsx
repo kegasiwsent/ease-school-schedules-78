@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,7 +35,10 @@ const SubjectAssignmentForm = ({
   const availableSubjects = getAllAvailableSubjects(teachers);
 
   const getTotalAssignedPeriods = () => {
-    return currentConfig.subjectAssignments.reduce((total, assignment) => total + assignment.periodsPerWeek, 0);
+    // Only count periods for subjects that have both subject selected AND teacher assigned
+    return currentConfig.subjectAssignments
+      .filter(assignment => selectedSubjects.includes(assignment.subject) && assignment.teacherId)
+      .reduce((total, assignment) => total + assignment.periodsPerWeek, 0);
   };
 
   const getAvailableTeachers = (subject: string) => {
@@ -57,6 +61,14 @@ const SubjectAssignmentForm = ({
   const totalAssigned = getTotalAssignedPeriods();
   const maxPeriods = currentConfig.periodsPerWeek;
   const remainingPeriods = maxPeriods - totalAssigned;
+
+  console.log('Period calculation debug:', {
+    totalAssigned,
+    maxPeriods,
+    remainingPeriods,
+    subjectAssignments: currentConfig.subjectAssignments,
+    selectedSubjects
+  });
 
   return (
     <div className="space-y-6">

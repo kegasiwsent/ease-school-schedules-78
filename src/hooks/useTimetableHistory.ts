@@ -28,7 +28,20 @@ export const useTimetableHistory = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setHistory(data || []);
+      
+      // Convert the JSON data to proper TypeScript types
+      const typedHistory: TimetableHistoryItem[] = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        timetable_data: item.timetable_data,
+        teacher_schedules: item.teacher_schedules,
+        class_configs: item.class_configs as ClassConfig[],
+        teachers_data: item.teachers_data as Teacher[],
+        days: item.days,
+        created_at: item.created_at
+      }));
+      
+      setHistory(typedHistory);
     } catch (error) {
       console.error('Error loading timetable history:', error);
       toast({

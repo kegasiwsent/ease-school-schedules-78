@@ -1,14 +1,19 @@
 
 import React, { useState } from 'react';
-import { Calendar, Users, BookOpen, Settings, Clock, ChevronRight } from 'lucide-react';
+import { Calendar, Users, BookOpen, Settings, Clock, ChevronRight, History } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import TimetableGenerator from '@/components/TimetableGenerator';
+import TimetableHistory from '@/components/TimetableHistory';
 import { useToast } from '@/hooks/use-toast';
+import { useTeachers } from '@/hooks/useTeachers';
+import { useTimetableHistory } from '@/hooks/useTimetableHistory';
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState('dashboard');
   const { toast } = useToast();
+  const { teachers } = useTeachers();
+  const { history } = useTimetableHistory();
 
   const handleNavigation = (section: string) => {
     setActiveSection(section);
@@ -20,9 +25,9 @@ const Index = () => {
 
   const stats = [
     { title: 'Total Classes', value: '24', icon: Users, color: 'bg-blue-500' },
-    { title: 'Active Teachers', value: '48', icon: BookOpen, color: 'bg-green-500' },
+    { title: 'Active Teachers', value: teachers.length.toString(), icon: BookOpen, color: 'bg-green-500' },
     { title: 'Subjects', value: '12', icon: Calendar, color: 'bg-purple-500' },
-    { title: 'Generated Timetables', value: '6', icon: Clock, color: 'bg-orange-500' },
+    { title: 'Generated Timetables', value: history.length.toString(), icon: Clock, color: 'bg-orange-500' },
   ];
 
   return (
@@ -56,6 +61,14 @@ const Index = () => {
               >
                 <Calendar className="w-4 h-4" />
                 <span>Timetable Generator</span>
+              </Button>
+              <Button
+                variant={activeSection === 'history' ? 'default' : 'ghost'}
+                onClick={() => handleNavigation('history')}
+                className="flex items-center space-x-2"
+              >
+                <History className="w-4 h-4" />
+                <span>History</span>
               </Button>
             </nav>
           </div>
@@ -97,7 +110,7 @@ const Index = () => {
             </div>
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="hover:shadow-lg transition-shadow duration-300 cursor-pointer" 
                     onClick={() => handleNavigation('timetable')}>
                 <CardHeader>
@@ -127,6 +140,35 @@ const Index = () => {
                 </CardContent>
               </Card>
 
+              <Card className="hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+                    onClick={() => handleNavigation('history')}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    Timetable History
+                    <ChevronRight className="w-5 h-5" />
+                  </CardTitle>
+                  <CardDescription>
+                    View and manage previously generated timetables
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <History className="w-4 h-4" />
+                      <span>{history.length} saved timetables</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Users className="w-4 h-4" />
+                      <span>{teachers.length} registered teachers</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Calendar className="w-4 h-4" />
+                      <span>View detailed schedules</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card className="hover:shadow-lg transition-shadow duration-300">
                 <CardHeader>
                   <CardTitle>System Overview</CardTitle>
@@ -141,12 +183,12 @@ const Index = () => {
                       <span className="text-sm font-medium text-green-600">Online</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Last Backup</span>
-                      <span className="text-sm font-medium">2 hours ago</span>
+                      <span className="text-sm text-gray-600">Database</span>
+                      <span className="text-sm font-medium text-green-600">Connected</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Active Users</span>
-                      <span className="text-sm font-medium">156</span>
+                      <span className="text-sm text-gray-600">Teachers</span>
+                      <span className="text-sm font-medium">{teachers.length}</span>
                     </div>
                   </div>
                 </CardContent>
@@ -157,6 +199,10 @@ const Index = () => {
 
         {activeSection === 'timetable' && (
           <TimetableGenerator />
+        )}
+
+        {activeSection === 'history' && (
+          <TimetableHistory />
         )}
       </main>
     </div>

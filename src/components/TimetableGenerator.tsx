@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from 'lucide-react';
@@ -10,15 +9,16 @@ import ClassConfigForm from './timetable/ClassConfigForm';
 import SubjectAssignmentForm from './timetable/SubjectAssignmentForm';
 import StepNavigation from './timetable/StepNavigation';
 import { useTimetableGeneration } from '@/hooks/useTimetableGeneration';
+import { useTeachers } from '@/hooks/useTeachers';
+import { useTimetableHistory } from '@/hooks/useTimetableHistory';
 import type { Teacher, ClassConfig, GeneratedTimetables } from '@/types/timetable';
 
 const TimetableGenerator = () => {
   const { toast } = useToast();
   const { generateTimetables: generateTimetablesHook } = useTimetableGeneration();
+  const { teachers, saveTeacher, updateTeacher, deleteTeacher, loading: teachersLoading } = useTeachers();
+  const { saveTimetable } = useTimetableHistory();
   const [currentStep, setCurrentStep] = useState(1);
-  
-  // Step 1: Teachers
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
   
   // Step 2 & 3: Class Configuration
   const [classConfigs, setClassConfigs] = useState<ClassConfig[]>([]);
@@ -44,21 +44,16 @@ const TimetableGenerator = () => {
   };
 
   // Step 1: Teacher Management
-  const handleAddTeacher = (newTeacher: Teacher) => {
-    setTeachers([...teachers, newTeacher]);
+  const handleAddTeacher = async (newTeacher: Teacher) => {
+    await saveTeacher(newTeacher);
   };
 
-  const handleUpdateTeacher = (id: string, updatedFields: Partial<Teacher>) => {
-    setTeachers(prev => prev.map(teacher => {
-      if (teacher.id === id) {
-        return { ...teacher, ...updatedFields };
-      }
-      return teacher;
-    }));
+  const handleUpdateTeacher = async (id: string, updatedFields: Partial<Teacher>) => {
+    await updateTeacher(id, updatedFields);
   };
 
-  const handleRemoveTeacher = (id: string) => {
-    setTeachers(teachers.filter(t => t.id !== id));
+  const handleRemoveTeacher = async (id: string) => {
+    await deleteTeacher(id);
   };
 
   // Step 2-3: Class Configuration
@@ -146,22 +141,6 @@ const TimetableGenerator = () => {
     );
     updatedConfigs.push(currentConfig);
     setClassConfigs(updatedConfigs);
-    
-    // Update teacher assigned periods per subject
-    const updatedTeachers = teachers.map(teacher => {
-      const subjectPeriods: { [subject: string]: number } = {};
-      
-      updatedConfigs.forEach(config => {
-        config.subjectAssignments
-          .filter(assignment => assignment.teacherId === teacher.id)
-          .forEach(assignment => {
-            subjectPeriods[assignment.subject] = (subjectPeriods[assignment.subject] || 0) + assignment.periodsPerWeek;
-          });
-      });
-      
-      return { ...teacher, assignedPeriods: subjectPeriods };
-    });
-    setTeachers(updatedTeachers);
 
     toast({
       title: "Class Configuration Saved",
@@ -185,11 +164,17 @@ const TimetableGenerator = () => {
     try {
       const result = await generateTimetablesHook(teachers, classConfigs);
       setGeneratedTimetables(result);
+      
+      // Save to history with timestamp
+      const timestamp = new Date().toLocaleString();
+      const timetableName = `Timetable - ${timestamp}`;
+      await saveTimetable(timetableName, result, classConfigs, teachers);
+      
       setCurrentStep(5);
       
       toast({
         title: "Enhanced Timetables Generated! 🎉",
-        description: `Successfully generated optimized timetables for classes and teachers with personal time.`,
+        description: `Successfully generated and saved optimized timetables.`,
       });
     } catch (error) {
       toast({
@@ -276,6 +261,17 @@ const TimetableGenerator = () => {
       default: return '';
     }
   };
+
+  if (teachersLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p>Loading teachers...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

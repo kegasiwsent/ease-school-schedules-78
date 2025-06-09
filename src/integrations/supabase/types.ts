@@ -9,7 +9,75 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      teachers: {
+        Row: {
+          class_teacher_of: string | null
+          contact_info: string | null
+          created_at: string
+          id: string
+          is_class_teacher: boolean | null
+          name: string
+          period_limit: number | null
+          subjects: string[]
+          updated_at: string
+        }
+        Insert: {
+          class_teacher_of?: string | null
+          contact_info?: string | null
+          created_at?: string
+          id?: string
+          is_class_teacher?: boolean | null
+          name: string
+          period_limit?: number | null
+          subjects: string[]
+          updated_at?: string
+        }
+        Update: {
+          class_teacher_of?: string | null
+          contact_info?: string | null
+          created_at?: string
+          id?: string
+          is_class_teacher?: boolean | null
+          name?: string
+          period_limit?: number | null
+          subjects?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      timetable_history: {
+        Row: {
+          class_configs: Json
+          created_at: string
+          days: string[]
+          id: string
+          name: string
+          teacher_schedules: Json
+          teachers_data: Json
+          timetable_data: Json
+        }
+        Insert: {
+          class_configs: Json
+          created_at?: string
+          days: string[]
+          id?: string
+          name: string
+          teacher_schedules: Json
+          teachers_data: Json
+          timetable_data: Json
+        }
+        Update: {
+          class_configs?: Json
+          created_at?: string
+          days?: string[]
+          id?: string
+          name?: string
+          teacher_schedules?: Json
+          teachers_data?: Json
+          timetable_data?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

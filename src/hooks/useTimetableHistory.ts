@@ -35,8 +35,8 @@ export const useTimetableHistory = () => {
         name: item.name,
         timetable_data: item.timetable_data,
         teacher_schedules: item.teacher_schedules,
-        class_configs: item.class_configs as ClassConfig[],
-        teachers_data: item.teachers_data as Teacher[],
+        class_configs: item.class_configs as unknown as ClassConfig[],
+        teachers_data: item.teachers_data as unknown as Teacher[],
         days: item.days,
         created_at: item.created_at
       }));

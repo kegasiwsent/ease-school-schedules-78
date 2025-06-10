@@ -225,6 +225,7 @@ const TimetableGenerator = () => {
             currentConfig={currentConfig}
             selectedSubjects={selectedSubjects}
             teachers={teachers}
+            classConfigs={classConfigs}
             onToggleSubject={toggleSubject}
             onSubjectAssignment={handleSubjectAssignment}
             onSaveConfig={saveClassConfig}

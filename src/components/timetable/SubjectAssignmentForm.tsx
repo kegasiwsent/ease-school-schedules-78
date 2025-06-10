@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +13,7 @@ interface SubjectAssignmentFormProps {
   currentConfig: ClassConfig | null;
   selectedSubjects: string[];
   teachers: Teacher[];
+  classConfigs: ClassConfig[]; // Add this to get all class configs
   onToggleSubject: (subject: string) => void;
   onSubjectAssignment: (subject: string, periodsPerWeek: number, teacherId: string) => void;
   onSaveConfig: () => void;
@@ -24,6 +24,7 @@ const SubjectAssignmentForm = ({
   currentConfig,
   selectedSubjects,
   teachers,
+  classConfigs = [], // Default to empty array
   onToggleSubject,
   onSubjectAssignment,
   onSaveConfig,
@@ -56,7 +57,43 @@ const SubjectAssignmentForm = ({
     const teacher = teachers.find(t => t.id === teacherId);
     if (!teacher) return { used: 0, limit: null };
     
-    const totalUsed = Object.values(teacher.assignedPeriods).reduce((sum, periods) => sum + periods, 0);
+    // Calculate total periods across ALL classes (including current config)
+    let totalUsed = 0;
+    
+    // Count periods from all existing class configs
+    classConfigs.forEach(config => {
+      config.subjectAssignments.forEach(assignment => {
+        if (assignment.teacherId === teacherId) {
+          totalUsed += assignment.periodsPerWeek;
+        }
+      });
+    });
+    
+    // If this is the current config being edited, subtract its old assignments and add current ones
+    if (currentConfig) {
+      const currentClassName = `${currentConfig.class}${currentConfig.division}`;
+      const existingConfig = classConfigs.find(config => 
+        `${config.class}${config.division}` === currentClassName
+      );
+      
+      // Subtract existing assignments for this class to avoid double counting
+      if (existingConfig) {
+        existingConfig.subjectAssignments.forEach(assignment => {
+          if (assignment.teacherId === teacherId) {
+            totalUsed -= assignment.periodsPerWeek;
+          }
+        });
+      }
+      
+      // Add current assignments (including unsaved changes)
+      selectedSubjects.forEach(subject => {
+        const assignment = currentConfig.subjectAssignments.find(a => a.subject === subject);
+        if (assignment && assignment.teacherId === teacherId) {
+          totalUsed += assignment.periodsPerWeek;
+        }
+      });
+    }
+    
     return { used: totalUsed, limit: teacher.periodLimit };
   };
 
@@ -117,7 +154,7 @@ const SubjectAssignmentForm = ({
           {/* Teacher Period Limits Overview */}
           <Card className="border-orange-200 bg-orange-50">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-orange-800">Teacher Period Limits</CardTitle>
+              <CardTitle className="text-sm font-medium text-orange-800">Teacher Period Limits (All Classes)</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
@@ -220,8 +257,7 @@ const SubjectAssignmentForm = ({
                                     <div className="flex items-center space-x-2">
                                       {isClassTeacher && <Crown className="w-3 h-3 text-yellow-600" />}
                                       <span>
-                                        {teacher.name} ({subject}: {assignedForSubject}) 
-                                        [{usage.used}/{usage.limit || '∞'}]
+                                        {teacher.name} (Total: {usage.used}/{usage.limit || '∞'})
                                       </span>
                                     </div>
                                   </SelectItem>

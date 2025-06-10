@@ -63,10 +63,10 @@ export const useTimetableHistory = () => {
     try {
       const insertData = {
         name: name,
-        timetable_data: timetables.timetables,
-        teacher_schedules: timetables.teacherSchedules,
-        class_configs: classConfigs,
-        teachers_data: teachers,
+        timetable_data: timetables.timetables as any,
+        teacher_schedules: timetables.teacherSchedules as any,
+        class_configs: classConfigs as any,
+        teachers_data: teachers as any,
         days: timetables.days
       };
 

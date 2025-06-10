@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -60,16 +61,18 @@ export const useTimetableHistory = () => {
     teachers: Teacher[]
   ) => {
     try {
+      const insertData = {
+        name: name,
+        timetable_data: timetables.timetables,
+        teacher_schedules: timetables.teacherSchedules,
+        class_configs: classConfigs,
+        teachers_data: teachers,
+        days: timetables.days
+      };
+
       const { error } = await supabase
         .from('timetable_history')
-        .insert({
-          name: name,
-          timetable_data: timetables.timetables,
-          teacher_schedules: timetables.teacherSchedules,
-          class_configs: classConfigs,
-          teachers_data: teachers,
-          days: timetables.days
-        });
+        .insert(insertData);
 
       if (error) throw error;
 

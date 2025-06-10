@@ -35,10 +35,17 @@ const SubjectAssignmentForm = ({
   const availableSubjects = getAllAvailableSubjects(teachers);
 
   const getTotalAssignedPeriods = () => {
-    // Only count periods for subjects that have both subject selected AND teacher assigned
-    return currentConfig.subjectAssignments
-      .filter(assignment => selectedSubjects.includes(assignment.subject) && assignment.teacherId)
-      .reduce((total, assignment) => total + assignment.periodsPerWeek, 0);
+    // Only count periods for subjects that are selected AND have a teacher assigned
+    let totalPeriods = 0;
+    
+    selectedSubjects.forEach(subject => {
+      const assignment = currentConfig.subjectAssignments.find(a => a.subject === subject);
+      if (assignment && assignment.teacherId) {
+        totalPeriods += assignment.periodsPerWeek;
+      }
+    });
+    
+    return totalPeriods;
   };
 
   const getAvailableTeachers = (subject: string) => {
@@ -62,12 +69,15 @@ const SubjectAssignmentForm = ({
   const maxPeriods = currentConfig.periodsPerWeek;
   const remainingPeriods = maxPeriods - totalAssigned;
 
-  console.log('Period calculation debug:', {
+  console.log('Period calculation debug - Fixed:', {
     totalAssigned,
     maxPeriods,
     remainingPeriods,
+    selectedSubjects,
     subjectAssignments: currentConfig.subjectAssignments,
-    selectedSubjects
+    assignedSubjectsWithTeachers: currentConfig.subjectAssignments.filter(a => 
+      selectedSubjects.includes(a.subject) && a.teacherId
+    )
   });
 
   return (

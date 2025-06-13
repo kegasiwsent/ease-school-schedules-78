@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import TimetableDisplay from './TimetableDisplay';
 import TeacherForm from './timetable/TeacherForm';
 import TeacherList from './timetable/TeacherList';
+import BulkImportTeachers from './timetable/BulkImportTeachers';
 import ClassConfigForm from './timetable/ClassConfigForm';
 import SubjectAssignmentForm from './timetable/SubjectAssignmentForm';
 import StepNavigation from './timetable/StepNavigation';
@@ -54,6 +55,19 @@ const TimetableGenerator = () => {
 
   const handleRemoveTeacher = async (id: string) => {
     await deleteTeacher(id);
+  };
+
+  // Handle bulk import of teachers
+  const handleBulkImport = (results: any[]) => {
+    // Results are already processed by BulkImportTeachers component
+    console.log('Bulk import completed:', results);
+  };
+
+  const handleTeachersImported = async (importedTeachers: Teacher[]) => {
+    // Save each imported teacher to the database
+    for (const teacher of importedTeachers) {
+      await saveTeacher(teacher);
+    }
   };
 
   // Step 2-3: Class Configuration
@@ -193,6 +207,11 @@ const TimetableGenerator = () => {
         return (
           <div className="space-y-6">
             <TeacherForm teachers={teachers} onAddTeacher={handleAddTeacher} />
+            <BulkImportTeachers 
+              teachers={teachers}
+              onImportComplete={handleBulkImport}
+              onTeachersImported={handleTeachersImported}
+            />
             <TeacherList 
               teachers={teachers} 
               onUpdateTeacher={handleUpdateTeacher}

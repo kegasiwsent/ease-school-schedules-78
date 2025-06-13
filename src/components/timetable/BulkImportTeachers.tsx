@@ -139,9 +139,52 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
     }
   };
 
+  const readFileAsText = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      // Try multiple approaches to read the file
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        try {
+          const result = event.target?.result;
+          if (typeof result === 'string') {
+            console.log('File read successfully, length:', result.length);
+            resolve(result);
+          } else {
+            console.error('Unexpected result type:', typeof result);
+            reject(new Error('File content is not text'));
+          }
+        } catch (error) {
+          console.error('Error processing file result:', error);
+          reject(new Error('Failed to process file content'));
+        }
+      };
+
+      reader.onerror = (event) => {
+        console.error('FileReader error:', event);
+        reject(new Error('File reading failed - please try a different file or browser'));
+      };
+
+      reader.onabort = () => {
+        console.error('FileReader aborted');
+        reject(new Error('File reading was aborted'));
+      };
+
+      try {
+        // Try reading as text with UTF-8 encoding
+        reader.readAsText(file, 'UTF-8');
+      } catch (error) {
+        console.error('Error starting file read:', error);
+        reject(new Error('Failed to start reading file'));
+      }
+    });
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
     if (!uploadedFile) return;
+
+    console.log('File selected:', uploadedFile.name, 'Size:', uploadedFile.size, 'Type:', uploadedFile.type);
 
     if (!uploadedFile.name.toLowerCase().endsWith('.csv')) {
       toast({
@@ -162,6 +205,16 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
       return;
     }
 
+    // Check if file is empty
+    if (uploadedFile.size === 0) {
+      toast({
+        title: "Empty File",
+        description: "The selected file is empty. Please choose a file with data.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setFile(uploadedFile);
     setResults([]);
     setShowResults(false);
@@ -175,23 +228,15 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
     setResults([]);
 
     try {
-      // Use FileReader for better file reading support
-      const text = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          if (e.target?.result) {
-            resolve(e.target.result as string);
-          } else {
-            reject(new Error('Failed to read file'));
-          }
-        };
-        reader.onerror = () => reject(new Error('File reading failed'));
-        reader.readAsText(file, 'UTF-8');
-      });
+      console.log('Starting import process for file:', file.name);
+      
+      const text = await readFileAsText(file);
       
       if (!text || text.trim().length === 0) {
-        throw new Error('File is empty or could not be read');
+        throw new Error('File appears to be empty or contains no readable content');
       }
+
+      console.log('File content preview:', text.substring(0, 200) + '...');
 
       const rows = parseCSV(text);
       
@@ -203,6 +248,9 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
       const dataRows = rows.slice(1);
       const importResults: ImportResult[] = [];
       const successfulTeachers: Teacher[] = [];
+
+      console.log('Headers found:', headers);
+      console.log('Data rows:', dataRows.length);
 
       // Validate required headers
       const requiredHeaders = ['name', 'subjects'];
@@ -256,6 +304,8 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
           teacher: newTeacher
         });
       }
+
+      console.log('Import results:', importResults);
 
       setResults(importResults);
       setShowResults(true);

@@ -152,6 +152,16 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
       return;
     }
 
+    // Check file size (limit to 5MB)
+    if (uploadedFile.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Please upload a file smaller than 5MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setFile(uploadedFile);
     setResults([]);
     setShowResults(false);
@@ -165,7 +175,24 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
     setResults([]);
 
     try {
-      const text = await file.text();
+      // Use FileReader for better file reading support
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            resolve(e.target.result as string);
+          } else {
+            reject(new Error('Failed to read file'));
+          }
+        };
+        reader.onerror = () => reject(new Error('File reading failed'));
+        reader.readAsText(file, 'UTF-8');
+      });
+      
+      if (!text || text.trim().length === 0) {
+        throw new Error('File is empty or could not be read');
+      }
+
       const rows = parseCSV(text);
       
       if (rows.length < 2) {
@@ -248,9 +275,10 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
       });
 
     } catch (error) {
+      console.error('Import error:', error);
       toast({
         title: "Import Failed",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
+        description: error instanceof Error ? error.message : "Unknown error occurred during file import",
         variant: "destructive"
       });
     } finally {
@@ -266,12 +294,14 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
       'Jane Doe,"English,History",jane.doe@school.edu,40,false,,"English:4,History:4"'
     ].join('\n');
 
-    const blob = new Blob([template], { type: 'text/csv' });
+    const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'teacher_import_template.csv';
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -316,7 +346,7 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
           </Alert>
 
           <div>
-            <Label htmlFor="csv-upload">Select CSV File</Label>
+            <Label htmlFor="csv-upload">Select CSV File (Max 5MB)</Label>
             <Input
               id="csv-upload"
               type="file"

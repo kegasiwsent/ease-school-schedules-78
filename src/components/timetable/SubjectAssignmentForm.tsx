@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -5,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, AlertCircle, User, Crown } from 'lucide-react';
+import { ArrowLeft, AlertCircle, User, Crown, AlertTriangle } from 'lucide-react';
 import { getAllAvailableSubjects } from '@/utils/subjectUtils';
 import type { ClassConfig, Teacher } from '@/types/timetable';
 
@@ -13,7 +14,7 @@ interface SubjectAssignmentFormProps {
   currentConfig: ClassConfig | null;
   selectedSubjects: string[];
   teachers: Teacher[];
-  classConfigs: ClassConfig[]; // Add this to get all class configs
+  classConfigs: ClassConfig[];
   onToggleSubject: (subject: string) => void;
   onSubjectAssignment: (subject: string, periodsPerWeek: number, teacherId: string) => void;
   onSaveConfig: () => void;
@@ -24,7 +25,7 @@ const SubjectAssignmentForm = ({
   currentConfig,
   selectedSubjects,
   teachers,
-  classConfigs = [], // Default to empty array
+  classConfigs = [],
   onToggleSubject,
   onSubjectAssignment,
   onSaveConfig,
@@ -57,7 +58,7 @@ const SubjectAssignmentForm = ({
     const teacher = teachers.find(t => t.id === teacherId);
     if (!teacher) return { used: 0, limit: null };
     
-    // Calculate total periods across ALL classes (including current config)
+    // Calculate total periods across ALL classes (including current config with live updates)
     let totalUsed = 0;
     
     // Count periods from all existing class configs
@@ -85,10 +86,9 @@ const SubjectAssignmentForm = ({
         });
       }
       
-      // Add current assignments (including unsaved changes)
-      selectedSubjects.forEach(subject => {
-        const assignment = currentConfig.subjectAssignments.find(a => a.subject === subject);
-        if (assignment && assignment.teacherId === teacherId) {
+      // Add current assignments (including ALL current unsaved changes - this is the key fix)
+      currentConfig.subjectAssignments.forEach(assignment => {
+        if (assignment.teacherId === teacherId) {
           totalUsed += assignment.periodsPerWeek;
         }
       });
@@ -97,9 +97,33 @@ const SubjectAssignmentForm = ({
     return { used: totalUsed, limit: teacher.periodLimit };
   };
 
+  const checkTeacherLimitViolation = (teacherId: string, newPeriods: number, currentSubject: string) => {
+    const teacher = teachers.find(t => t.id === teacherId);
+    if (!teacher || !teacher.periodLimit) return false;
+    
+    const usage = getTeacherUsage(teacherId);
+    
+    // Calculate what the new total would be if we assign these periods
+    const currentAssignment = currentConfig?.subjectAssignments.find(a => a.subject === currentSubject && a.teacherId === teacherId);
+    const currentPeriods = currentAssignment ? currentAssignment.periodsPerWeek : 0;
+    const newTotal = usage.used - currentPeriods + newPeriods;
+    
+    return newTotal > teacher.periodLimit;
+  };
+
   const exceedsMaxPeriods = () => {
     const totalAssigned = getTotalAssignedPeriods();
     return totalAssigned > currentConfig.periodsPerWeek;
+  };
+
+  // Check if any teacher limit violations exist
+  const hasTeacherLimitViolations = () => {
+    return currentConfig.subjectAssignments.some(assignment => {
+      const teacher = teachers.find(t => t.id === assignment.teacherId);
+      if (!teacher || !teacher.periodLimit) return false;
+      const usage = getTeacherUsage(assignment.teacherId);
+      return usage.used > teacher.periodLimit;
+    });
   };
 
   const totalAssigned = getTotalAssignedPeriods();
@@ -149,6 +173,12 @@ const SubjectAssignmentForm = ({
                 <span className="text-sm">Total periods exceed the maximum allowed</span>
               </div>
             )}
+            {hasTeacherLimitViolations() && (
+              <div className="flex items-center space-x-2 mt-2 text-orange-600">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-sm">Some teachers exceed their period limits</span>
+              </div>
+            )}
           </div>
 
           {/* Teacher Period Limits Overview */}
@@ -176,6 +206,7 @@ const SubjectAssignmentForm = ({
                       <div className={`text-xs ${isOverLimit ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
                         {usage.used}/{usage.limit || '∞'}
                         {isClassTeacher && <span className="ml-1 text-yellow-600">(CT)</span>}
+                        {isOverLimit && <AlertTriangle className="w-3 h-3 inline ml-1" />}
                       </div>
                     </div>
                   );
@@ -242,20 +273,21 @@ const SubjectAssignmentForm = ({
                             </SelectTrigger>
                             <SelectContent>
                               {availableTeachers.map(teacher => {
-                                const assignedForSubject = teacher.assignedPeriods[subject] || 0;
                                 const usage = getTeacherUsage(teacher.id);
                                 const className = `${currentConfig.class}${currentConfig.division}`;
                                 const isClassTeacher = teacher.isClassTeacher && teacher.classTeacherOf === className;
-                                const isOverLimit = usage.limit && usage.used >= usage.limit;
+                                const wouldExceedLimit = checkTeacherLimitViolation(teacher.id, currentAssignment?.periodsPerWeek || 5, subject);
+                                const isCurrentlyOverLimit = usage.limit && usage.used > usage.limit;
                                 
                                 return (
                                   <SelectItem 
                                     key={teacher.id} 
                                     value={teacher.id}
-                                    className={isOverLimit ? 'text-red-500' : ''}
+                                    className={isCurrentlyOverLimit || wouldExceedLimit ? 'text-red-500' : ''}
                                   >
                                     <div className="flex items-center space-x-2">
                                       {isClassTeacher && <Crown className="w-3 h-3 text-yellow-600" />}
+                                      {(isCurrentlyOverLimit || wouldExceedLimit) && <AlertTriangle className="w-3 h-3 text-red-500" />}
                                       <span>
                                         {teacher.name} (Total: {usage.used}/{usage.limit || '∞'})
                                       </span>
@@ -268,6 +300,12 @@ const SubjectAssignmentForm = ({
                           {availableTeachers.length === 0 && (
                             <p className="text-sm text-red-500 mt-1">
                               No available teachers for {subject}
+                            </p>
+                          )}
+                          {currentAssignment?.teacherId && checkTeacherLimitViolation(currentAssignment.teacherId, currentAssignment.periodsPerWeek, subject) && (
+                            <p className="text-sm text-red-500 mt-1 flex items-center">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              This assignment exceeds teacher's period limit
                             </p>
                           )}
                         </div>
@@ -288,7 +326,7 @@ const SubjectAssignmentForm = ({
               onClick={onSaveConfig}
               disabled={selectedSubjects.length === 0 || !selectedSubjects.every(subject => 
                 currentConfig.subjectAssignments.some(a => a.subject === subject && a.teacherId)
-              ) || exceedsMaxPeriods()}
+              ) || exceedsMaxPeriods() || hasTeacherLimitViolations()}
               className="flex-1"
             >
               Save Configuration

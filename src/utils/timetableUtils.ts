@@ -1,8 +1,10 @@
-
 import type { ScheduleState, Teacher, ClassConfig } from '@/types/timetable';
 
 // Activity subjects that should be distributed
 export const activitySubjects = ['PE', 'Computer', 'SST'];
+
+// Core subjects that should be prioritized for class teachers in 1st period
+export const coreSubjects = ['Maths', 'Science', 'English'];
 
 export const canPlacePeriod = (
   state: ScheduleState,
@@ -29,6 +31,13 @@ export const canPlacePeriod = (
     }
   }
 
+  // NEW RULE: Only one period per day for each subject
+  const daySchedule = state.timetables[className][day];
+  const subjectAlreadyScheduledToday = daySchedule.some(slot => slot && slot.subject === subject);
+  if (subjectAlreadyScheduledToday) {
+    return false;
+  }
+
   // Check teacher fatigue - no more than 2 consecutive periods
   const teacherConsecutiveCount = state.teacherConsecutive[teacherId]?.[day] || 0;
   if (teacherConsecutiveCount >= 2) {
@@ -38,44 +47,27 @@ export const canPlacePeriod = (
     }
   }
 
-  // Check subject consecutive periods - max 2 per day
-  let consecutiveSubjectCount = 0;
-  
-  // Count consecutive periods before this slot
-  for (let p = period - 1; p >= 0; p--) {
-    const slot = state.timetables[className][day][p];
-    if (slot && slot.subject === subject) {
-      consecutiveSubjectCount++;
-    } else {
-      break;
-    }
+  // Modified: Since we only allow one period per day per subject, remove consecutive subject check
+  // This is now handled by the one-period-per-day rule above
+
+  return true;
+};
+
+export const canPlaceFreePeriod = (
+  state: ScheduleState,
+  className: string,
+  day: string,
+  period: number
+): boolean => {
+  // Don't place free periods back-to-back
+  if (period > 0 && state.timetables[className][day][period - 1] === null) {
+    return false; // Previous period is also free
+  }
+  if (period < state.timetables[className][day].length - 1 && 
+      state.timetables[className][day][period + 1] === null) {
+    return false; // Next period is also free
   }
   
-  // Count consecutive periods after this slot
-  for (let p = period + 1; p < state.timetables[className][day].length; p++) {
-    const slot = state.timetables[className][day][p];
-    if (slot && slot.subject === subject) {
-      consecutiveSubjectCount++;
-    } else {
-      break;
-    }
-  }
-
-  if (consecutiveSubjectCount >= 2) return false;
-
-  // Check minimum gap rule - skip at least one period before placing same subject again
-  const lastPlaced = state.subjectLastPlaced[className]?.[subject]?.[day] ?? -2;
-  if (lastPlaced !== -2 && period - lastPlaced < 2) {
-    // Only allow if we're placing the second consecutive period
-    if (period - lastPlaced !== 1) return false;
-    
-    // Check if this would create more than 2 consecutive
-    if (period + 1 < state.timetables[className][day].length) {
-      const nextSlot = state.timetables[className][day][period + 1];
-      if (nextSlot && nextSlot.subject === subject) return false;
-    }
-  }
-
   return true;
 };
 
@@ -121,4 +113,33 @@ export const updateScheduleState = (
       state.teacherSchedules[teacherId][day][period + 1] === null) {
     state.teacherConsecutive[teacherId][day] = 0;
   }
+};
+
+// NEW: Helper function to get even distribution of subjects across days
+export const getOptimalDayForSubject = (
+  state: ScheduleState,
+  className: string,
+  subject: string,
+  workingDays: string[],
+  remainingPeriods: number
+): string[] => {
+  const subjectDayCount = state.subjectDayCount[className]?.[subject] || {};
+  
+  // Calculate how many days this subject should be spread across
+  const targetDays = Math.min(remainingPeriods, workingDays.length);
+  
+  // Find days where this subject hasn't been placed yet
+  const availableDays = workingDays.filter(day => !subjectDayCount[day]);
+  
+  // If we have enough available days, use them
+  if (availableDays.length >= targetDays) {
+    return availableDays.slice(0, targetDays);
+  }
+  
+  // Otherwise, find days with the least occurrences of this subject
+  const daysByCount = workingDays
+    .map(day => ({ day, count: subjectDayCount[day] || 0 }))
+    .sort((a, b) => a.count - b.count);
+  
+  return daysByCount.slice(0, targetDays).map(item => item.day);
 };

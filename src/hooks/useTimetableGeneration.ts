@@ -34,6 +34,9 @@ export const useTimetableGeneration = () => {
         subjectDayCount: {}
       };
 
+      // Track teacher period counts
+      const teacherPeriodCounts: { [teacherId: string]: number } = {};
+
       // Initialize timetables
       classConfigs.forEach(config => {
         const className = `${config.class}${config.division}`;
@@ -44,9 +47,10 @@ export const useTimetableGeneration = () => {
         });
       });
 
-      // Initialize teacher schedules
+      // Initialize teacher schedules and period counts
       teachers.forEach(teacher => {
         state.teacherSchedules[teacher.id] = {};
+        teacherPeriodCounts[teacher.id] = 0;
         allDays.forEach(day => {
           const maxPeriodsForDay = day === 'Saturday' 
             ? Math.max(...classConfigs.filter(c => c.includeSaturday).map(c => c.saturdayPeriods))
@@ -55,7 +59,7 @@ export const useTimetableGeneration = () => {
         });
       });
 
-      // FIXED: Enhanced Step 1 - Assign class teachers to first periods properly
+      // STEP 1: Assign class teachers to first periods with core subjects
       classConfigs.forEach(config => {
         const className = `${config.class}${config.division}`;
         
@@ -65,33 +69,41 @@ export const useTimetableGeneration = () => {
         );
         
         if (classTeacher) {
-          console.log(`Found class teacher ${classTeacher.name} for ${className}`);
+          console.log(`🎯 Processing class teacher ${classTeacher.name} for ${className}`);
           
-          // Find subjects that this class teacher can teach for this class
-          const teachableSubjects = config.subjectAssignments.filter(
+          // Find core subjects that this class teacher can teach for this class
+          const teachableCoreSubjects = config.subjectAssignments.filter(
+            assignment => assignment.teacherId === classTeacher.id && 
+                         coreSubjects.includes(assignment.subject)
+          );
+          
+          // If no core subjects, fall back to any subject they can teach
+          const fallbackSubjects = config.subjectAssignments.filter(
             assignment => assignment.teacherId === classTeacher.id
           );
           
-          // Prioritize core subjects if available
-          const teachableCoreSubjects = teachableSubjects.filter(
-            assignment => coreSubjects.includes(assignment.subject)
-          );
-          
-          const subjectsToUse = teachableCoreSubjects.length > 0 ? teachableCoreSubjects : teachableSubjects;
+          const subjectsToUse = teachableCoreSubjects.length > 0 ? teachableCoreSubjects : fallbackSubjects;
           
           if (subjectsToUse.length > 0) {
             const workingDays = config.includeSaturday ? allDays : days;
             
-            console.log(`Assigning ${classTeacher.name} to first periods for ${className} on days:`, workingDays);
+            console.log(`📚 Available core subjects for ${classTeacher.name}:`, 
+              subjectsToUse.map(s => s.subject));
             
-            // Assign first period on ALL working days
+            // Assign first period on ALL working days with core subjects
             workingDays.forEach((day, dayIndex) => {
               const periodIndex = 0; // First period
               
-              // Rotate through available subjects for variety
+              // Check if teacher has reached period limit
+              if (teacherPeriodCounts[classTeacher.id] >= (classTeacher.periodLimit || 35)) {
+                console.log(`⚠️ Class teacher ${classTeacher.name} has reached period limit`);
+                return;
+              }
+              
+              // Rotate through available core subjects for variety
               const subjectAssignment = subjectsToUse[dayIndex % subjectsToUse.length];
               
-              // Force assign the class teacher to first period (skip conflict checks for class teacher)
+              // Assign the class teacher to first period
               if (state.timetables[className][day][periodIndex] === null) {
                 updateScheduleState(
                   state, 
@@ -103,9 +115,10 @@ export const useTimetableGeneration = () => {
                   classTeacher.name
                 );
                 
-                console.log(`✅ Class teacher ${classTeacher.name} assigned 1st period on ${day} for ${className} (${subjectAssignment.subject})`);
-              } else {
-                console.log(`❌ Failed to assign class teacher ${classTeacher.name} on ${day} for ${className} - slot already occupied`);
+                // Increment teacher's period count
+                teacherPeriodCounts[classTeacher.id]++;
+                
+                console.log(`✅ Class teacher ${classTeacher.name} assigned 1st period on ${day} for ${className} (${subjectAssignment.subject}) - Total periods: ${teacherPeriodCounts[classTeacher.id]}`);
               }
             });
           } else {
@@ -116,7 +129,7 @@ export const useTimetableGeneration = () => {
         }
       });
 
-      // Step 2: Generate remaining timetables with improved distribution
+      // STEP 2: Fill remaining periods with proper distribution
       classConfigs.forEach(config => {
         const className = `${config.class}${config.division}`;
         const workingDays = config.includeSaturday ? allDays : days;
@@ -165,12 +178,42 @@ export const useTimetableGeneration = () => {
           optimalDays.forEach(day => {
             if (periodsAssigned >= remainingPeriods) return;
             
+            // Check if teacher has reached period limit
+            if (teacherPeriodCounts[teacher.id] >= (teacher.periodLimit || 35)) {
+              console.log(`⚠️ Teacher ${teacher.name} has reached period limit (${teacherPeriodCounts[teacher.id]}/${teacher.periodLimit || 35})`);
+              
+              // Find alternative teacher for this subject
+              const alternativeTeacher = teachers.find(t => 
+                t.id !== teacher.id && 
+                t.subjects.includes(assignment.subject) &&
+                teacherPeriodCounts[t.id] < (t.periodLimit || 35)
+              );
+              
+              if (alternativeTeacher) {
+                console.log(`🔄 Assigning ${assignment.subject} to alternative teacher: ${alternativeTeacher.name}`);
+                
+                const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
+                
+                // Skip first period (reserved for class teacher) and try other periods
+                for (let period = 1; period < periodsForDay && periodsAssigned < remainingPeriods; period++) {
+                  if (canPlacePeriod(state, className, day, period, assignment.subject, alternativeTeacher.id, teachers)) {
+                    updateScheduleState(state, className, day, period, assignment.subject, alternativeTeacher.id, alternativeTeacher.name);
+                    teacherPeriodCounts[alternativeTeacher.id]++;
+                    periodsAssigned++;
+                    break;
+                  }
+                }
+              }
+              return;
+            }
+            
             const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
             
             // Skip first period (reserved for class teacher) and try other periods
             for (let period = 1; period < periodsForDay && periodsAssigned < remainingPeriods; period++) {
               if (canPlacePeriod(state, className, day, period, assignment.subject, teacher.id, teachers)) {
                 updateScheduleState(state, className, day, period, assignment.subject, teacher.id, teacher.name);
+                teacherPeriodCounts[teacher.id]++;
                 periodsAssigned++;
                 break; // Only one period per day per subject
               }
@@ -184,11 +227,36 @@ export const useTimetableGeneration = () => {
             remainingDays.forEach(day => {
               if (periodsAssigned >= remainingPeriods) return;
               
+              // Check if teacher has reached period limit
+              if (teacherPeriodCounts[teacher.id] >= (teacher.periodLimit || 35)) {
+                // Find alternative teacher
+                const alternativeTeacher = teachers.find(t => 
+                  t.id !== teacher.id && 
+                  t.subjects.includes(assignment.subject) &&
+                  teacherPeriodCounts[t.id] < (t.periodLimit || 35)
+                );
+                
+                if (alternativeTeacher) {
+                  const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
+                  
+                  for (let period = 1; period < periodsForDay && periodsAssigned < remainingPeriods; period++) {
+                    if (canPlacePeriod(state, className, day, period, assignment.subject, alternativeTeacher.id, teachers)) {
+                      updateScheduleState(state, className, day, period, assignment.subject, alternativeTeacher.id, alternativeTeacher.name);
+                      teacherPeriodCounts[alternativeTeacher.id]++;
+                      periodsAssigned++;
+                      break;
+                    }
+                  }
+                }
+                return;
+              }
+              
               const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
               
               for (let period = 1; period < periodsForDay && periodsAssigned < remainingPeriods; period++) {
                 if (canPlacePeriod(state, className, day, period, assignment.subject, teacher.id, teachers)) {
                   updateScheduleState(state, className, day, period, assignment.subject, teacher.id, teacher.name);
+                  teacherPeriodCounts[teacher.id]++;
                   periodsAssigned++;
                   break;
                 }
@@ -207,7 +275,6 @@ export const useTimetableGeneration = () => {
             if (state.timetables[className][day][period] === null) {
               // Check if we can place a free period here (no back-to-back free periods)
               if (canPlaceFreePeriod(state, className, day, period)) {
-                // Leave as free period (null)
                 console.log(`${className} - Free period placed at ${day} period ${period + 1}`);
               }
             }
@@ -245,49 +312,16 @@ export const useTimetableGeneration = () => {
         });
       });
 
-      // Final validation - check for conflicts and subject distribution
-      let hasConflicts = false;
+      // Final validation and summary
+      console.log('\n📊 TEACHER PERIOD SUMMARY:');
       teachers.forEach(teacher => {
-        allDays.forEach(day => {
-          const schedule = teacherTimetables[teacher.id][day];
-          schedule.forEach((period, periodIndex) => {
-            if (period) {
-              // Count how many times this teacher appears at this time slot
-              let conflicts = 0;
-              Object.entries(state.timetables).forEach(([className, classTimetable]) => {
-                const slot = classTimetable[day]?.[periodIndex];
-                if (slot && slot.teacherId === teacher.id) {
-                  conflicts++;
-                }
-              });
-              
-              if (conflicts > 1) {
-                console.error(`❌ CONFLICT: Teacher ${teacher.name} assigned to multiple classes at ${day} period ${periodIndex + 1}`);
-                hasConflicts = true;
-              }
-            }
-          });
-        });
+        const totalPeriods = teacherPeriodCounts[teacher.id] || 0;
+        const limit = teacher.periodLimit || 35;
+        const status = totalPeriods <= limit ? '✅' : '⚠️';
+        console.log(`${status} ${teacher.name}: ${totalPeriods}/${limit} periods (Class Teacher: ${teacher.isClassTeacher ? teacher.classTeacherOf || 'Yes' : 'No'})`);
       });
 
-      // Validate subject distribution (max one per day)
-      Object.entries(state.timetables).forEach(([className, classTimetable]) => {
-        Object.entries(classTimetable).forEach(([day, daySchedule]) => {
-          const subjectCount: { [subject: string]: number } = {};
-          daySchedule.forEach(period => {
-            if (period) {
-              subjectCount[period.subject] = (subjectCount[period.subject] || 0) + 1;
-              if (subjectCount[period.subject] > 1) {
-                console.warn(`⚠️ WARNING: ${className} has multiple ${period.subject} periods on ${day}`);
-              }
-            }
-          });
-        });
-      });
-
-      if (!hasConflicts) {
-        console.log('✅ No teacher conflicts detected - Enhanced timetable with class teacher first periods generated');
-      }
+      console.log('\n🎯 Enhanced timetable generated with structured class teacher assignment!');
 
       resolve({ 
         timetables: state.timetables, 

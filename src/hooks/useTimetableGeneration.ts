@@ -55,51 +55,68 @@ export const useTimetableGeneration = () => {
         });
       });
 
-      // ENHANCED Step 1: Assign class teachers to first periods with core subjects priority
-      teachers.forEach(teacher => {
-        if (teacher.isClassTeacher && teacher.classTeacherOf) {
-          const className = teacher.classTeacherOf;
-          const config = classConfigs.find(c => `${c.class}${c.division}` === className);
+      // FIXED: Enhanced Step 1 - Assign class teachers to first periods properly
+      classConfigs.forEach(config => {
+        const className = `${config.class}${config.division}`;
+        
+        // Find the class teacher for this specific class
+        const classTeacher = teachers.find(teacher => 
+          teacher.isClassTeacher && teacher.classTeacherOf === className
+        );
+        
+        if (classTeacher) {
+          console.log(`Found class teacher ${classTeacher.name} for ${className}`);
           
-          if (config) {
-            // Find core subjects that this teacher can teach for this class
-            const teachableCoreSubjects = config.subjectAssignments.filter(
-              assignment => assignment.teacherId === teacher.id && 
-                           coreSubjects.includes(assignment.subject)
-            );
+          // Find subjects that this class teacher can teach for this class
+          const teachableSubjects = config.subjectAssignments.filter(
+            assignment => assignment.teacherId === classTeacher.id
+          );
+          
+          // Prioritize core subjects if available
+          const teachableCoreSubjects = teachableSubjects.filter(
+            assignment => coreSubjects.includes(assignment.subject)
+          );
+          
+          const subjectsToUse = teachableCoreSubjects.length > 0 ? teachableCoreSubjects : teachableSubjects;
+          
+          if (subjectsToUse.length > 0) {
+            const workingDays = config.includeSaturday ? allDays : days;
             
-            // If no core subjects, fall back to any subject this teacher can teach
-            const teachableSubjects = teachableCoreSubjects.length > 0 
-              ? teachableCoreSubjects 
-              : config.subjectAssignments.filter(assignment => assignment.teacherId === teacher.id);
+            console.log(`Assigning ${classTeacher.name} to first periods for ${className} on days:`, workingDays);
             
-            if (teachableSubjects.length > 0) {
-              const workingDays = config.includeSaturday ? allDays : days;
+            // Assign first period on ALL working days
+            workingDays.forEach((day, dayIndex) => {
+              const periodIndex = 0; // First period
               
-              // Assign first period on ALL working days with variety in core subjects
-              workingDays.forEach((day, index) => {
-                const periodIndex = 0;
+              // Rotate through available subjects for variety
+              const subjectAssignment = subjectsToUse[dayIndex % subjectsToUse.length];
+              
+              // Force assign the class teacher to first period (skip conflict checks for class teacher)
+              if (state.timetables[className][day][periodIndex] === null) {
+                updateScheduleState(
+                  state, 
+                  className, 
+                  day, 
+                  periodIndex, 
+                  subjectAssignment.subject, 
+                  classTeacher.id, 
+                  classTeacher.name
+                );
                 
-                // Rotate through available core subjects for variety
-                const subjectToAssign = teachableSubjects[index % teachableSubjects.length];
-                
-                // Check if teacher is available and slot is free
-                if (state.teacherSchedules[teacher.id][day][periodIndex] === null &&
-                    state.timetables[className][day][periodIndex] === null) {
-                  
-                  updateScheduleState(state, className, day, periodIndex, subjectToAssign.subject, teacher.id, teacher.name);
-                  
-                  console.log(`✅ Class teacher ${teacher.name} assigned 1st period on ${day} for ${className} (${subjectToAssign.subject})`);
-                } else {
-                  console.log(`❌ Failed to assign class teacher ${teacher.name} on ${day} for ${className} - conflict detected`);
-                }
-              });
-            }
+                console.log(`✅ Class teacher ${classTeacher.name} assigned 1st period on ${day} for ${className} (${subjectAssignment.subject})`);
+              } else {
+                console.log(`❌ Failed to assign class teacher ${classTeacher.name} on ${day} for ${className} - slot already occupied`);
+              }
+            });
+          } else {
+            console.log(`❌ Class teacher ${classTeacher.name} has no teachable subjects for ${className}`);
           }
+        } else {
+          console.log(`⚠️ No class teacher found for ${className}`);
         }
       });
 
-      // ENHANCED Step 2: Generate remaining timetables with improved distribution
+      // Step 2: Generate remaining timetables with improved distribution
       classConfigs.forEach(config => {
         const className = `${config.class}${config.division}`;
         const workingDays = config.includeSaturday ? allDays : days;
@@ -131,7 +148,7 @@ export const useTimetableGeneration = () => {
           return 0;
         });
 
-        // ENHANCED: Distribute subjects evenly across days
+        // Distribute subjects evenly across days
         sortedAssignments.forEach(assignment => {
           const teacher = teachers.find(t => t.id === assignment.teacherId);
           if (!teacher) return;
@@ -182,7 +199,7 @@ export const useTimetableGeneration = () => {
           console.log(`${className} - ${assignment.subject}: Assigned ${periodsAssigned}/${remainingPeriods} additional periods (Teacher: ${teacher.name})`);
         });
 
-        // ENHANCED: Fill remaining slots with free periods (avoiding back-to-back)
+        // Fill remaining slots with free periods (avoiding back-to-back)
         workingDays.forEach(day => {
           const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
           
@@ -269,7 +286,7 @@ export const useTimetableGeneration = () => {
       });
 
       if (!hasConflicts) {
-        console.log('✅ No teacher conflicts detected - Enhanced timetable with even subject distribution generated');
+        console.log('✅ No teacher conflicts detected - Enhanced timetable with class teacher first periods generated');
       }
 
       resolve({ 

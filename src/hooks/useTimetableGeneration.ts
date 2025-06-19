@@ -61,9 +61,10 @@ export const useTimetableGeneration = () => {
 
       // Helper function to get class teacher for a specific class
       const getClassTeacher = (className: string): Teacher | null => {
-        return teachers.find(teacher => 
-          teacher.isClassTeacher && teacher.classTeacherOf === className
-        ) || null;
+        const config = classConfigs.find(c => `${c.class}${c.division}` === className);
+        if (!config || !config.classTeacherId) return null;
+        
+        return teachers.find(teacher => teacher.id === config.classTeacherId) || null;
       };
 
       // Helper function to get available subject for class teacher
@@ -93,7 +94,7 @@ export const useTimetableGeneration = () => {
         teacherPeriodCounts[teacher.id] = (teacherPeriodCounts[teacher.id] || 0) + 1;
       };
 
-      // MAIN ALGORITHM: Implement the exact logic flow provided
+      // MAIN ALGORITHM: Class Teacher Assignment Algorithm
       console.log('🎯 Starting Class Teacher Assignment Algorithm');
       
       // for day in days_of_week:
@@ -351,7 +352,9 @@ export const useTimetableGeneration = () => {
         const totalPeriods = teacherPeriodCounts[teacher.id] || 0;
         const limit = teacher.periodLimit || 35;
         const status = totalPeriods <= limit ? '✅' : '⚠️';
-        console.log(`${status} ${teacher.name}: ${totalPeriods}/${limit} periods (Class Teacher: ${teacher.isClassTeacher ? teacher.classTeacherOf || 'Yes' : 'No'})`);
+        const assignedClass = classConfigs.find(c => c.classTeacherId === teacher.id);
+        const classTeacherInfo = assignedClass ? `${assignedClass.class}${assignedClass.division}` : 'No';
+        console.log(`${status} ${teacher.name}: ${totalPeriods}/${limit} periods (Class Teacher: ${classTeacherInfo})`);
       });
 
       console.log('\n🎯 Class Teacher Algorithm completed successfully!');

@@ -5,18 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BookOpen, ArrowRight } from 'lucide-react';
-import type { ClassConfig } from '@/types/timetable';
+import { BookOpen, ArrowRight, User } from 'lucide-react';
+import type { ClassConfig, Teacher } from '@/types/timetable';
 
 interface ClassConfigFormProps {
   currentClass: string;
   currentDivision: string;
+  selectedClassTeacher: string;
   weekdayPeriods: number;
   saturdayPeriods: number;
   includeSaturday: boolean;
   classConfigs: ClassConfig[];
+  teachers: Teacher[];
   onClassChange: (value: string) => void;
   onDivisionChange: (value: string) => void;
+  onClassTeacherChange: (value: string) => void;
   onWeekdayPeriodsChange: (value: number) => void;
   onSaturdayPeriodsChange: (value: number) => void;
   onIncludeSaturdayChange: (value: boolean) => void;
@@ -29,12 +32,15 @@ const divisions = ['A', 'B', 'C', 'D'];
 const ClassConfigForm = ({
   currentClass,
   currentDivision,
+  selectedClassTeacher,
   weekdayPeriods,
   saturdayPeriods,
   includeSaturday,
   classConfigs,
+  teachers,
   onClassChange,
   onDivisionChange,
+  onClassTeacherChange,
   onWeekdayPeriodsChange,
   onSaturdayPeriodsChange,
   onIncludeSaturdayChange,
@@ -46,17 +52,28 @@ const ClassConfigForm = ({
     return weekdayTotal + saturdayTotal;
   };
 
+  // Get available teachers who are not already assigned as class teachers to other classes
+  const getAvailableTeachers = () => {
+    const assignedClassTeachers = classConfigs
+      .filter(config => config.classTeacherId && `${config.class}${config.division}` !== `${currentClass}${currentDivision}`)
+      .map(config => config.classTeacherId);
+    
+    return teachers.filter(teacher => !assignedClassTeachers.includes(teacher.id));
+  };
+
+  const selectedTeacher = teachers.find(t => t.id === selectedClassTeacher);
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <BookOpen className="w-5 h-5" />
-            <span>Class & Division Selection</span>
+            <span>Class Configuration</span>
           </CardTitle>
-          <CardDescription>Select class, division, and configure periods per day</CardDescription>
+          <CardDescription>Configure class, division, class teacher, and periods per day</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Class</Label>
@@ -85,6 +102,33 @@ const ClassConfigForm = ({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div>
+            <Label className="flex items-center space-x-2">
+              <User className="w-4 h-4" />
+              <span>Class Teacher</span>
+            </Label>
+            <Select value={selectedClassTeacher} onValueChange={onClassTeacherChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select class teacher" />
+              </SelectTrigger>
+              <SelectContent>
+                {getAvailableTeachers().map(teacher => (
+                  <SelectItem key={teacher.id} value={teacher.id}>
+                    {teacher.name}
+                    <span className="text-sm text-gray-500 ml-2">
+                      ({teacher.subjects.join(', ')})
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedTeacher && (
+              <p className="text-sm text-blue-600 mt-1">
+                ✓ {selectedTeacher.name} will get first period every day for their subjects
+              </p>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -149,7 +193,7 @@ const ClassConfigForm = ({
           
           <Button 
             onClick={onStartClassConfig}
-            disabled={!currentClass || !currentDivision}
+            disabled={!currentClass || !currentDivision || !selectedClassTeacher}
             className="w-full"
           >
             Configure Subjects <ArrowRight className="w-4 h-4 ml-2" />
@@ -167,6 +211,9 @@ const ClassConfigForm = ({
               {classConfigs.map((config, index) => (
                 <div key={index} className="p-3 border rounded-lg">
                   <div className="font-medium">{config.class}{config.division}</div>
+                  <div className="text-sm text-blue-600">
+                    Class Teacher: {teachers.find(t => t.id === config.classTeacherId)?.name || 'Not assigned'}
+                  </div>
                   <div className="text-sm text-gray-600">
                     {config.selectedSubjects.length} subjects, {config.periodsPerWeek} periods/week
                     {config.includeSaturday ? ' (incl. Saturday)' : ''}

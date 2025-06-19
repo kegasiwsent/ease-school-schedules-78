@@ -1,3 +1,4 @@
+
 export interface Teacher {
   id: string;
   name: string;
@@ -18,6 +19,7 @@ export interface SubjectAssignment {
 export interface ClassConfig {
   class: string;
   division: string;
+  classTeacherId?: string;
   selectedSubjects: string[];
   subjectAssignments: SubjectAssignment[];
   periodsPerWeek: number;

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -20,7 +21,9 @@ export const useTeachers = () => {
       const formattedTeachers: Teacher[] = data?.map(teacher => ({
         id: teacher.id,
         name: teacher.name,
-        subjects: teacher.subjects,
+        subjects: teacher.subjects || [], // Keep for backward compatibility
+        mainSubjects: teacher.main_subjects || [],
+        extraSubjects: teacher.extra_subjects || [],
         contactInfo: teacher.contact_info,
         assignedPeriods: {},
         periodLimit: teacher.period_limit,
@@ -43,13 +46,15 @@ export const useTeachers = () => {
 
   const saveTeacher = async (teacher: Teacher) => {
     try {
-      console.log('Saving teacher:', teacher);
+      console.log('Saving teacher with main/extra subjects:', teacher);
       
       const { error } = await supabase
         .from('teachers')
         .insert({
           name: teacher.name,
-          subjects: teacher.subjects,
+          subjects: [...(teacher.mainSubjects || []), ...(teacher.extraSubjects || [])], // Combined for backward compatibility
+          main_subjects: teacher.mainSubjects || [],
+          extra_subjects: teacher.extraSubjects || [],
           contact_info: teacher.contactInfo || null,
           period_limit: teacher.periodLimit || 35,
           is_class_teacher: teacher.isClassTeacher || false,
@@ -85,6 +90,8 @@ export const useTeachers = () => {
         .update({
           name: updates.name,
           subjects: updates.subjects,
+          main_subjects: updates.mainSubjects,
+          extra_subjects: updates.extraSubjects,
           contact_info: updates.contactInfo,
           period_limit: updates.periodLimit,
           is_class_teacher: updates.isClassTeacher,

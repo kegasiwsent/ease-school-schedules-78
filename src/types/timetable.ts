@@ -2,7 +2,9 @@
 export interface Teacher {
   id: string;
   name: string;
-  subjects: string[];
+  subjects: string[]; // Keep for backward compatibility
+  mainSubjects: string[];
+  extraSubjects: string[];
   contactInfo?: string;
   assignedPeriods: { [subject: string]: number };
   periodLimit?: number;
@@ -14,6 +16,7 @@ export interface SubjectAssignment {
   subject: string;
   periodsPerWeek: number;
   teacherId: string;
+  isMainSubject: boolean;
 }
 
 export interface ClassConfig {
@@ -21,6 +24,8 @@ export interface ClassConfig {
   division: string;
   classTeacherId?: string;
   selectedSubjects: string[];
+  selectedMainSubjects: string[];
+  selectedExtraSubjects: string[];
   subjectAssignments: SubjectAssignment[];
   periodsPerWeek: number;
   weekdayPeriods: number;

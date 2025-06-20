@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, AlertCircle, User, Crown, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, User, Crown, AlertTriangle, BookOpen, Palette } from 'lucide-react';
 import { getAllAvailableSubjects } from '@/utils/subjectUtils';
 import type { ClassConfig, Teacher } from '@/types/timetable';
 
@@ -16,7 +15,7 @@ interface SubjectAssignmentFormProps {
   teachers: Teacher[];
   classConfigs: ClassConfig[];
   onToggleSubject: (subject: string) => void;
-  onSubjectAssignment: (subject: string, periodsPerWeek: number, teacherId: string) => void;
+  onSubjectAssignment: (subject: string, periodsPerWeek: number, teacherId: string, isMainSubject: boolean) => void;
   onSaveConfig: () => void;
   onBack: () => void;
 }
@@ -33,11 +32,27 @@ const SubjectAssignmentForm = ({
 }: SubjectAssignmentFormProps) => {
   if (!currentConfig) return null;
 
-  // Get all available subjects from teachers (including custom ones)
-  const availableSubjects = getAllAvailableSubjects(teachers);
+  // Get all available subjects separated by type
+  const getAllMainSubjects = () => {
+    const subjectSet = new Set<string>();
+    teachers.forEach(teacher => {
+      teacher.mainSubjects?.forEach(subject => subjectSet.add(subject));
+    });
+    return Array.from(subjectSet).sort();
+  };
+
+  const getAllExtraSubjects = () => {
+    const subjectSet = new Set<string>();
+    teachers.forEach(teacher => {
+      teacher.extraSubjects?.forEach(subject => subjectSet.add(subject));
+    });
+    return Array.from(subjectSet).sort();
+  };
+
+  const availableMainSubjects = getAllMainSubjects();
+  const availableExtraSubjects = getAllExtraSubjects();
 
   const getTotalAssignedPeriods = () => {
-    // Only count periods for subjects that are selected AND have a teacher assigned
     let totalPeriods = 0;
     
     selectedSubjects.forEach(subject => {
@@ -50,18 +65,22 @@ const SubjectAssignmentForm = ({
     return totalPeriods;
   };
 
-  const getAvailableTeachers = (subject: string) => {
-    return teachers.filter(teacher => teacher.subjects.includes(subject));
+  const getAvailableTeachers = (subject: string, isMainSubject: boolean) => {
+    return teachers.filter(teacher => {
+      if (isMainSubject) {
+        return teacher.mainSubjects?.includes(subject);
+      } else {
+        return teacher.extraSubjects?.includes(subject);
+      }
+    });
   };
 
   const getTeacherUsage = (teacherId: string) => {
     const teacher = teachers.find(t => t.id === teacherId);
     if (!teacher) return { used: 0, limit: null };
     
-    // Calculate total periods across ALL classes (including current config with live updates)
     let totalUsed = 0;
     
-    // Count periods from all existing class configs
     classConfigs.forEach(config => {
       config.subjectAssignments.forEach(assignment => {
         if (assignment.teacherId === teacherId) {
@@ -70,14 +89,12 @@ const SubjectAssignmentForm = ({
       });
     });
     
-    // If this is the current config being edited, subtract its old assignments and add current ones
     if (currentConfig) {
       const currentClassName = `${currentConfig.class}${currentConfig.division}`;
       const existingConfig = classConfigs.find(config => 
         `${config.class}${config.division}` === currentClassName
       );
       
-      // Subtract existing assignments for this class to avoid double counting
       if (existingConfig) {
         existingConfig.subjectAssignments.forEach(assignment => {
           if (assignment.teacherId === teacherId) {
@@ -86,7 +103,6 @@ const SubjectAssignmentForm = ({
         });
       }
       
-      // Add current assignments (including ALL current unsaved changes - this is the key fix)
       currentConfig.subjectAssignments.forEach(assignment => {
         if (assignment.teacherId === teacherId) {
           totalUsed += assignment.periodsPerWeek;
@@ -102,8 +118,6 @@ const SubjectAssignmentForm = ({
     if (!teacher || !teacher.periodLimit) return false;
     
     const usage = getTeacherUsage(teacherId);
-    
-    // Calculate what the new total would be if we assign these periods
     const currentAssignment = currentConfig?.subjectAssignments.find(a => a.subject === currentSubject && a.teacherId === teacherId);
     const currentPeriods = currentAssignment ? currentAssignment.periodsPerWeek : 0;
     const newTotal = usage.used - currentPeriods + newPeriods;
@@ -116,7 +130,6 @@ const SubjectAssignmentForm = ({
     return totalAssigned > currentConfig.periodsPerWeek;
   };
 
-  // Check if any teacher limit violations exist
   const hasTeacherLimitViolations = () => {
     return currentConfig.subjectAssignments.some(assignment => {
       const teacher = teachers.find(t => t.id === assignment.teacherId);
@@ -129,6 +142,27 @@ const SubjectAssignmentForm = ({
   const totalAssigned = getTotalAssignedPeriods();
   const maxPeriods = currentConfig.periodsPerWeek;
   const remainingPeriods = maxPeriods - totalAssigned;
+
+  const renderSubjectSection = (subjects: string[], title: string, icon: React.ReactNode, isMainSubject: boolean, bgColor: string) => (
+    <div className={`p-4 ${bgColor} rounded-lg`}>
+      <Label className="flex items-center space-x-2 text-base font-medium mb-3">
+        {icon}
+        <span>{title}</span>
+      </Label>
+      <div className="grid grid-cols-2 gap-2">
+        {subjects.map(subject => (
+          <div key={subject} className="flex items-center space-x-2">
+            <Checkbox
+              id={`${isMainSubject ? 'main' : 'extra'}-subject-${subject}`}
+              checked={selectedSubjects.includes(subject)}
+              onCheckedChange={() => onToggleSubject(subject)}
+            />
+            <Label htmlFor={`${isMainSubject ? 'main' : 'extra'}-subject-${subject}`} className="text-sm">{subject}</Label>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   console.log('Period calculation debug - Fixed:', {
     totalAssigned,
@@ -149,7 +183,7 @@ const SubjectAssignmentForm = ({
             Configure {currentConfig.class}{currentConfig.division}
           </CardTitle>
           <CardDescription>
-            Select subjects and assign teachers. Total periods: {currentConfig.periodsPerWeek}
+            Select main and extra subjects, then assign teachers. Total periods: {currentConfig.periodsPerWeek}
             {currentConfig.includeSaturday ? ' (including Saturday)' : ''}
           </CardDescription>
         </CardHeader>
@@ -215,33 +249,48 @@ const SubjectAssignmentForm = ({
             </CardContent>
           </Card>
 
-          <div>
+          {/* Subject Selection */}
+          <div className="space-y-4">
             <Label className="text-base font-medium">Select Subjects</Label>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {availableSubjects.map(subject => (
-                <div key={subject} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`config-subject-${subject}`}
-                    checked={selectedSubjects.includes(subject)}
-                    onCheckedChange={() => onToggleSubject(subject)}
-                  />
-                  <Label htmlFor={`config-subject-${subject}`} className="text-sm">{subject}</Label>
-                </div>
-              ))}
-            </div>
+            
+            {/* Main Subjects */}
+            {renderSubjectSection(
+              availableMainSubjects, 
+              "Main Subjects", 
+              <BookOpen className="w-4 h-4" />, 
+              true, 
+              "bg-blue-50"
+            )}
+            
+            {/* Extra Subjects */}
+            {renderSubjectSection(
+              availableExtraSubjects, 
+              "Extra Subjects", 
+              <Palette className="w-4 h-4" />, 
+              false, 
+              "bg-green-50"
+            )}
           </div>
 
+          {/* Subject Assignment */}
           {selectedSubjects.length > 0 && (
             <div>
               <Label className="text-base font-medium">Assign Teachers & Periods</Label>
               <div className="space-y-4 mt-4">
                 {selectedSubjects.map(subject => {
-                  const availableTeachers = getAvailableTeachers(subject);
+                  const isMainSubject = availableMainSubjects.includes(subject);
+                  const availableTeachers = getAvailableTeachers(subject, isMainSubject);
                   const currentAssignment = currentConfig.subjectAssignments.find(a => a.subject === subject);
                   
                   return (
-                    <div key={subject} className="p-4 border rounded-lg">
-                      <div className="font-medium mb-3">{subject}</div>
+                    <div key={subject} className={`p-4 border rounded-lg ${isMainSubject ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}>
+                      <div className="flex items-center space-x-2 mb-3">
+                        {isMainSubject ? <BookOpen className="w-4 h-4 text-blue-600" /> : <Palette className="w-4 h-4 text-green-600" />}
+                        <div className="font-medium">{subject}</div>
+                        <span className={`text-xs px-2 py-1 rounded ${isMainSubject ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'}`}>
+                          {isMainSubject ? 'Main' : 'Extra'}
+                        </span>
+                      </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label>Periods per week</Label>
@@ -254,7 +303,7 @@ const SubjectAssignmentForm = ({
                               const periods = parseInt(e.target.value) || 5;
                               const teacherId = currentAssignment?.teacherId || '';
                               if (teacherId) {
-                                onSubjectAssignment(subject, periods, teacherId);
+                                onSubjectAssignment(subject, periods, teacherId, isMainSubject);
                               }
                             }}
                           />
@@ -265,7 +314,7 @@ const SubjectAssignmentForm = ({
                             value={currentAssignment?.teacherId || ''}
                             onValueChange={(teacherId) => {
                               const periods = currentAssignment?.periodsPerWeek || 5;
-                              onSubjectAssignment(subject, periods, teacherId);
+                              onSubjectAssignment(subject, periods, teacherId, isMainSubject);
                             }}
                           >
                             <SelectTrigger>

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from 'lucide-react';
@@ -61,12 +60,10 @@ const TimetableGenerator = () => {
 
   // Handle bulk import of teachers
   const handleBulkImport = (results: any[]) => {
-    // Results are already processed by BulkImportTeachers component
     console.log('Bulk import completed:', results);
   };
 
   const handleTeachersImported = async (importedTeachers: Teacher[]) => {
-    // Save each imported teacher to the database
     for (const teacher of importedTeachers) {
       await saveTeacher(teacher);
     }
@@ -94,6 +91,8 @@ const TimetableGenerator = () => {
           division: currentDivision,
           classTeacherId: selectedClassTeacher,
           selectedSubjects: [],
+          selectedMainSubjects: [],
+          selectedExtraSubjects: [],
           subjectAssignments: [],
           periodsPerWeek: totalPeriods,
           weekdayPeriods: weekdayPeriods,
@@ -115,8 +114,8 @@ const TimetableGenerator = () => {
     );
   };
 
-  // Step 4: Subject Assignment
-  const handleSubjectAssignment = (subject: string, periodsPerWeek: number, teacherId: string) => {
+  // Step 4: Subject Assignment - Updated to handle main/extra subjects
+  const handleSubjectAssignment = (subject: string, periodsPerWeek: number, teacherId: string, isMainSubject: boolean) => {
     if (!currentConfig) return;
 
     const updatedConfig = { ...currentConfig };
@@ -127,54 +126,34 @@ const TimetableGenerator = () => {
     updatedConfig.includeSaturday = includeSaturday;
     updatedConfig.classTeacherId = selectedClassTeacher;
     
+    // Update main/extra subject lists
+    if (isMainSubject) {
+      if (!updatedConfig.selectedMainSubjects.includes(subject)) {
+        updatedConfig.selectedMainSubjects.push(subject);
+      }
+      updatedConfig.selectedExtraSubjects = updatedConfig.selectedExtraSubjects.filter(s => s !== subject);
+    } else {
+      if (!updatedConfig.selectedExtraSubjects.includes(subject)) {
+        updatedConfig.selectedExtraSubjects.push(subject);
+      }
+      updatedConfig.selectedMainSubjects = updatedConfig.selectedMainSubjects.filter(s => s !== subject);
+    }
+    
     const existingAssignment = updatedConfig.subjectAssignments.find(a => a.subject === subject);
     if (existingAssignment) {
       existingAssignment.periodsPerWeek = periodsPerWeek;
       existingAssignment.teacherId = teacherId;
+      existingAssignment.isMainSubject = isMainSubject;
     } else {
       updatedConfig.subjectAssignments.push({
         subject,
         periodsPerWeek,
-        teacherId
+        teacherId,
+        isMainSubject
       });
     }
     
     setCurrentConfig(updatedConfig);
-  };
-
-  const saveClassConfig = () => {
-    if (!currentConfig) return;
-
-    const totalAssigned = currentConfig.subjectAssignments.reduce((total, assignment) => total + assignment.periodsPerWeek, 0);
-    if (totalAssigned > currentConfig.periodsPerWeek) {
-      toast({
-        title: "Period Limit Exceeded",
-        description: `Total assigned periods (${totalAssigned}) exceed the maximum (${currentConfig.periodsPerWeek}).`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const updatedConfigs = classConfigs.filter(
-      config => !(config.class === currentConfig.class && config.division === currentConfig.division)
-    );
-    updatedConfigs.push(currentConfig);
-    setClassConfigs(updatedConfigs);
-
-    toast({
-      title: "Class Configuration Saved",
-      description: `Configuration for ${currentConfig.class}${currentConfig.division} has been saved.`,
-    });
-    
-    setCurrentStep(2);
-    setCurrentConfig(null);
-    setCurrentClass('');
-    setCurrentDivision('');
-    setSelectedClassTeacher('');
-    setSelectedSubjects([]);
-    setWeekdayPeriods(7);
-    setSaturdayPeriods(4);
-    setIncludeSaturday(false);
   };
 
   // Step 5: Generate Timetables
@@ -185,7 +164,6 @@ const TimetableGenerator = () => {
       const result = await generateTimetablesHook(teachers, classConfigs);
       setGeneratedTimetables(result);
       
-      // Save to history with timestamp
       const timestamp = new Date().toLocaleString();
       const timetableName = `Timetable - ${timestamp}`;
       await saveTimetable(timetableName, result, classConfigs, teachers);

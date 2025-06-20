@@ -14,8 +14,10 @@ export type Database = {
           class_teacher_of: string | null
           contact_info: string | null
           created_at: string
+          extra_subjects: string[] | null
           id: string
           is_class_teacher: boolean | null
+          main_subjects: string[] | null
           name: string
           period_limit: number | null
           subjects: string[]
@@ -25,8 +27,10 @@ export type Database = {
           class_teacher_of?: string | null
           contact_info?: string | null
           created_at?: string
+          extra_subjects?: string[] | null
           id?: string
           is_class_teacher?: boolean | null
+          main_subjects?: string[] | null
           name: string
           period_limit?: number | null
           subjects: string[]
@@ -36,8 +40,10 @@ export type Database = {
           class_teacher_of?: string | null
           contact_info?: string | null
           created_at?: string
+          extra_subjects?: string[] | null
           id?: string
           is_class_teacher?: boolean | null
+          main_subjects?: string[] | null
           name?: string
           period_limit?: number | null
           subjects?: string[]

@@ -156,6 +156,39 @@ const TimetableGenerator = () => {
     setCurrentConfig(updatedConfig);
   };
 
+  // Add the missing saveClassConfig function
+  const saveClassConfig = () => {
+    if (!currentConfig) return;
+
+    const updatedConfig = { ...currentConfig };
+    
+    // Update class configs list
+    const existingIndex = classConfigs.findIndex(
+      config => config.class === updatedConfig.class && config.division === updatedConfig.division
+    );
+    
+    if (existingIndex >= 0) {
+      const newConfigs = [...classConfigs];
+      newConfigs[existingIndex] = updatedConfig;
+      setClassConfigs(newConfigs);
+    } else {
+      setClassConfigs(prev => [...prev, updatedConfig]);
+    }
+
+    // Reset form state
+    setCurrentConfig(null);
+    setCurrentClass('');
+    setCurrentDivision('');
+    setSelectedClassTeacher('');
+    setSelectedSubjects([]);
+    setCurrentStep(2);
+
+    toast({
+      title: "Class Configuration Saved",
+      description: `Configuration for ${updatedConfig.class}${updatedConfig.division} has been saved.`,
+    });
+  };
+
   // Step 5: Generate Timetables
   const handleGenerateTimetables = async () => {
     setIsGenerating(true);

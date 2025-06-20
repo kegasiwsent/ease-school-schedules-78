@@ -284,11 +284,13 @@ const BulkImportTeachers = ({ teachers, onImportComplete, onTeachersImported }: 
 
         const importRow = validation.data!;
         
-        // Create teacher object
+        // Create teacher object with mainSubjects and extraSubjects
         const newTeacher: Teacher = {
           id: `imported-${Date.now()}-${i}`,
           name: importRow.name,
           subjects: importRow.subjects,
+          mainSubjects: importRow.subjects, // Default to all subjects as main subjects
+          extraSubjects: [], // Default to empty extra subjects
           contactInfo: importRow.contactInfo,
           assignedPeriods: importRow.subjectPeriods,
           periodLimit: importRow.periodLimit || 35,

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,16 +54,13 @@ const SubjectAssignmentForm = ({
 
   // Handle main subject toggle
   const handleMainSubjectToggle = (subject: string) => {
-    // Add to selected subjects if not already selected
-    if (!selectedSubjects.includes(subject)) {
-      onToggleSubject(subject);
-    } else {
-      // Remove from selected subjects
-      onToggleSubject(subject);
-    }
+    const isCurrentlySelected = selectedSubjects.includes(subject);
+    
+    // Toggle the subject in selectedSubjects
+    onToggleSubject(subject);
     
     // Update the config's main/extra subject lists
-    if (!selectedSubjects.includes(subject)) {
+    if (!isCurrentlySelected) {
       // Adding subject
       if (!currentConfig.selectedMainSubjects.includes(subject)) {
         currentConfig.selectedMainSubjects.push(subject);
@@ -81,16 +77,13 @@ const SubjectAssignmentForm = ({
 
   // Handle extra subject toggle
   const handleExtraSubjectToggle = (subject: string) => {
-    // Add to selected subjects if not already selected
-    if (!selectedSubjects.includes(subject)) {
-      onToggleSubject(subject);
-    } else {
-      // Remove from selected subjects
-      onToggleSubject(subject);
-    }
+    const isCurrentlySelected = selectedSubjects.includes(subject);
+    
+    // Toggle the subject in selectedSubjects
+    onToggleSubject(subject);
     
     // Update the config's main/extra subject lists
-    if (!selectedSubjects.includes(subject)) {
+    if (!isCurrentlySelected) {
       // Adding subject
       if (!currentConfig.selectedExtraSubjects.includes(subject)) {
         currentConfig.selectedExtraSubjects.push(subject);

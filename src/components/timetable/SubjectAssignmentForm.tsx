@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,58 @@ const SubjectAssignmentForm = ({
 
   const availableMainSubjects = getAllMainSubjects();
   const availableExtraSubjects = getAllExtraSubjects();
+
+  // Handle main subject toggle
+  const handleMainSubjectToggle = (subject: string) => {
+    // Add to selected subjects if not already selected
+    if (!selectedSubjects.includes(subject)) {
+      onToggleSubject(subject);
+    } else {
+      // Remove from selected subjects
+      onToggleSubject(subject);
+    }
+    
+    // Update the config's main/extra subject lists
+    if (!selectedSubjects.includes(subject)) {
+      // Adding subject
+      if (!currentConfig.selectedMainSubjects.includes(subject)) {
+        currentConfig.selectedMainSubjects.push(subject);
+      }
+      // Remove from extra subjects if it was there
+      currentConfig.selectedExtraSubjects = currentConfig.selectedExtraSubjects.filter(s => s !== subject);
+    } else {
+      // Removing subject
+      currentConfig.selectedMainSubjects = currentConfig.selectedMainSubjects.filter(s => s !== subject);
+      // Remove any assignments for this subject
+      currentConfig.subjectAssignments = currentConfig.subjectAssignments.filter(a => a.subject !== subject);
+    }
+  };
+
+  // Handle extra subject toggle
+  const handleExtraSubjectToggle = (subject: string) => {
+    // Add to selected subjects if not already selected
+    if (!selectedSubjects.includes(subject)) {
+      onToggleSubject(subject);
+    } else {
+      // Remove from selected subjects
+      onToggleSubject(subject);
+    }
+    
+    // Update the config's main/extra subject lists
+    if (!selectedSubjects.includes(subject)) {
+      // Adding subject
+      if (!currentConfig.selectedExtraSubjects.includes(subject)) {
+        currentConfig.selectedExtraSubjects.push(subject);
+      }
+      // Remove from main subjects if it was there
+      currentConfig.selectedMainSubjects = currentConfig.selectedMainSubjects.filter(s => s !== subject);
+    } else {
+      // Removing subject
+      currentConfig.selectedExtraSubjects = currentConfig.selectedExtraSubjects.filter(s => s !== subject);
+      // Remove any assignments for this subject
+      currentConfig.subjectAssignments = currentConfig.subjectAssignments.filter(a => a.subject !== subject);
+    }
+  };
 
   const getTotalAssignedPeriods = () => {
     let totalPeriods = 0;
@@ -155,7 +208,7 @@ const SubjectAssignmentForm = ({
             <Checkbox
               id={`${isMainSubject ? 'main' : 'extra'}-subject-${subject}`}
               checked={selectedSubjects.includes(subject)}
-              onCheckedChange={() => onToggleSubject(subject)}
+              onCheckedChange={() => isMainSubject ? handleMainSubjectToggle(subject) : handleExtraSubjectToggle(subject)}
             />
             <Label htmlFor={`${isMainSubject ? 'main' : 'extra'}-subject-${subject}`} className="text-sm">{subject}</Label>
           </div>

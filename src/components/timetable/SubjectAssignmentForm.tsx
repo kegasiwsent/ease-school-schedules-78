@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, AlertCircle, User, Crown, AlertTriangle, BookOpen, Palette } from 'lucide-react';
-import { getAllAvailableSubjects } from '@/utils/subjectUtils';
+import { getDefaultSubjects } from '@/utils/subjectUtils';
 import type { ClassConfig, Teacher } from '@/types/timetable';
 
 interface SubjectAssignmentFormProps {
@@ -35,22 +35,47 @@ const SubjectAssignmentForm = ({
   // Get all available subjects separated by type
   const getAllMainSubjects = () => {
     const subjectSet = new Set<string>();
+    
+    // Add subjects that teachers have marked as main subjects
     teachers.forEach(teacher => {
       teacher.mainSubjects?.forEach(subject => subjectSet.add(subject));
     });
+    
+    // Add common main subjects as fallback
+    const commonMainSubjects = ['English', 'Maths', 'Science', 'SST', 'Hindi', 'Gujarati'];
+    commonMainSubjects.forEach(subject => subjectSet.add(subject));
+    
     return Array.from(subjectSet).sort();
   };
 
   const getAllExtraSubjects = () => {
     const subjectSet = new Set<string>();
+    
+    // Add subjects that teachers have marked as extra subjects
     teachers.forEach(teacher => {
       teacher.extraSubjects?.forEach(subject => subjectSet.add(subject));
     });
+    
+    // Add common extra subjects as fallback
+    const commonExtraSubjects = ['Computer', 'PE', 'Drawing', 'Sanskrit', 'Music', 'Art'];
+    commonExtraSubjects.forEach(subject => subjectSet.add(subject));
+    
     return Array.from(subjectSet).sort();
   };
 
   const availableMainSubjects = getAllMainSubjects();
   const availableExtraSubjects = getAllExtraSubjects();
+
+  console.log('Available subjects debug:', {
+    availableMainSubjects,
+    availableExtraSubjects,
+    teachers: teachers.map(t => ({
+      name: t.name,
+      mainSubjects: t.mainSubjects,
+      extraSubjects: t.extraSubjects,
+      subjects: t.subjects
+    }))
+  });
 
   // Handle main subject toggle
   const handleMainSubjectToggle = (subject: string) => {
@@ -114,9 +139,9 @@ const SubjectAssignmentForm = ({
   const getAvailableTeachers = (subject: string, isMainSubject: boolean) => {
     return teachers.filter(teacher => {
       if (isMainSubject) {
-        return teacher.mainSubjects?.includes(subject);
+        return teacher.mainSubjects?.includes(subject) || teacher.subjects?.includes(subject);
       } else {
-        return teacher.extraSubjects?.includes(subject);
+        return teacher.extraSubjects?.includes(subject) || teacher.subjects?.includes(subject);
       }
     });
   };

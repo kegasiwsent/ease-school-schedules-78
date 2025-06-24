@@ -6,7 +6,10 @@ import {
   updateScheduleState, 
   activitySubjects, 
   coreSubjects,
-  canPlaceFreePeriod
+  canPlaceFreePeriod,
+  getOptimalTimeSlots,
+  getBalancedDayDistribution,
+  shuffleArray
 } from '@/utils/timetableUtils';
 
 export const useTimetableGeneration = () => {
@@ -25,7 +28,7 @@ export const useTimetableGeneration = () => {
           allDays.push('Saturday');
         }
 
-        console.log('🎯 Starting Enhanced Timetable Generation with Main/Extra Subjects');
+        console.log('🎯 Starting Enhanced Timetable Generation with Advanced Distribution');
         console.log('📊 Classes:', classConfigs.map(c => `${c.class}${c.division}`));
         console.log('👨‍🏫 Teachers:', teachers.map(t => t.name));
 
@@ -102,8 +105,8 @@ export const useTimetableGeneration = () => {
           return teacherAvailability[teacherId]?.[day]?.[period] === true;
         };
 
-        // === PHASE 1: ASSIGN CLASS TEACHERS TO FIRST PERIODS ===
-        console.log('📋 Phase 1: Assigning Class Teachers to First Period');
+        // === PHASE 1: SMART DISTRIBUTION OF CLASS TEACHERS ===
+        console.log('📋 Phase 1: Smart Distribution of Class Teachers');
         
         classConfigs.forEach(config => {
           const className = `${config.class}${config.division}`;
@@ -115,36 +118,36 @@ export const useTimetableGeneration = () => {
             if (primarySubject) {
               const workingDays = config.includeSaturday ? allDays : days;
               
-              workingDays.forEach(day => {
-                const firstPeriod = 0; // Period 1 (index 0)
+              // Distribute class teacher's periods across different time slots
+              const shuffledDays = shuffleArray(workingDays);
+              const timeSlots = [0, 1, 2]; // Vary the time slots for class teachers
+              
+              shuffledDays.forEach((day, dayIndex) => {
+                const timeSlot = timeSlots[dayIndex % timeSlots.length];
                 
-                // Check if class teacher is available for first period
-                if (isTeacherAvailable(classTeacher.id, day, firstPeriod)) {
-                  // Assign class teacher's primary subject to first period
-                  timetables[className][day][firstPeriod] = {
+                // Check if class teacher is available for this time slot
+                if (isTeacherAvailable(classTeacher.id, day, timeSlot) && 
+                    timetables[className][day][timeSlot] === null) {
+                  
+                  // Assign class teacher's primary subject
+                  timetables[className][day][timeSlot] = {
                     subject: primarySubject,
                     teacher: classTeacher.name,
                     teacherId: classTeacher.id
                   };
                   
                   // Mark teacher as occupied
-                  markTeacherOccupied(classTeacher.id, day, firstPeriod, className);
+                  markTeacherOccupied(classTeacher.id, day, timeSlot, className);
                   
-                  console.log(`✅ ${classTeacher.name} assigned first period on ${day} for ${className} (${primarySubject})`);
-                } else {
-                  console.warn(`⚠️ Class Teacher ${classTeacher.name} not available for first period ${day}`);
+                  console.log(`✅ ${classTeacher.name} assigned ${primarySubject} on ${day} period ${timeSlot + 1} for ${className}`);
                 }
               });
-            } else {
-              console.warn(`⚠️ No primary subject found for class teacher ${classTeacher.name} in ${className}`);
             }
-          } else {
-            console.warn(`⚠️ No class teacher assigned for ${className}`);
           }
         });
 
-        // === PHASE 2: FILL MAIN SUBJECTS (PERIODS 2-4 ON WEEKDAYS, 1-2 ON SATURDAY) ===
-        console.log('📚 Phase 2: Filling Main Subjects');
+        // === PHASE 2: ADVANCED MAIN SUBJECTS DISTRIBUTION ===
+        console.log('📚 Phase 2: Advanced Main Subjects Distribution');
         
         classConfigs.forEach(config => {
           const className = `${config.class}${config.division}`;
@@ -152,8 +155,8 @@ export const useTimetableGeneration = () => {
           
           console.log(`\n🏫 Processing Main Subjects for ${className}`);
           
-          // Create main subject assignment queue
-          const mainSubjectQueue: Array<{subject: string, teacherId: string, periodsNeeded: number}> = [];
+          // Create main subject assignment queue with intelligent sorting
+          const mainSubjectQueue: Array<{subject: string, teacherId: string, periodsNeeded: number, teacher: Teacher}> = [];
           
           config.subjectAssignments.forEach(assignment => {
             if (assignment.isMainSubject) {
@@ -169,59 +172,77 @@ export const useTimetableGeneration = () => {
               });
               
               const periodsNeeded = assignment.periodsPerWeek - assignedPeriods;
-              if (periodsNeeded > 0) {
+              const teacher = teachers.find(t => t.id === assignment.teacherId);
+              
+              if (periodsNeeded > 0 && teacher) {
                 mainSubjectQueue.push({
                   subject: assignment.subject,
                   teacherId: assignment.teacherId,
-                  periodsNeeded: periodsNeeded
+                  periodsNeeded: periodsNeeded,
+                  teacher: teacher
                 });
               }
             }
           });
 
-          // Fill main subjects in early periods
+          // Sort by periods needed (descending) and shuffle subjects with same period count
+          mainSubjectQueue.sort((a, b) => {
+            if (a.periodsNeeded !== b.periodsNeeded) {
+              return b.periodsNeeded - a.periodsNeeded;
+            }
+            return Math.random() - 0.5; // Random order for same period counts
+          });
+
+          // Distribute main subjects using advanced algorithm
           mainSubjectQueue.forEach(item => {
-            const teacher = teachers.find(t => t.id === item.teacherId);
-            if (!teacher) return;
-
             let periodsAssigned = 0;
-            let attempts = 0;
-            const maxAttempts = workingDays.length * 10;
+            const targetDays = getBalancedDayDistribution(
+              { timetables, teacherSchedules, subjectLastPlaced: {}, teacherConsecutive: {}, subjectDayCount: {} },
+              className,
+              item.subject,
+              workingDays,
+              item.periodsNeeded
+            );
 
-            while (periodsAssigned < item.periodsNeeded && attempts < maxAttempts) {
-              attempts++;
+            for (const day of shuffleArray(targetDays)) {
+              if (periodsAssigned >= item.periodsNeeded) break;
               
-              for (const day of workingDays) {
+              const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
+              const optimalSlots = getOptimalTimeSlots(
+                { timetables, teacherSchedules, subjectLastPlaced: {}, teacherConsecutive: {}, subjectDayCount: {} },
+                className,
+                item.subject,
+                day,
+                periodsForDay,
+                item.periodsNeeded,
+                workingDays,
+                true
+              );
+
+              for (const period of optimalSlots) {
                 if (periodsAssigned >= item.periodsNeeded) break;
                 
-                const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
-                const mainPeriodLimit = day === 'Saturday' ? 2 : 4; // Main subjects in periods 1-4 on weekdays, 1-2 on Saturday
-                
-                for (let period = 0; period < Math.min(periodsForDay, mainPeriodLimit); period++) {
-                  if (periodsAssigned >= item.periodsNeeded) break;
+                // Check if this slot is empty and teacher is available
+                if (timetables[className][day][period] === null && 
+                    isTeacherAvailable(item.teacherId, day, period)) {
                   
-                  // Check if this slot is empty and teacher is available
-                  if (timetables[className][day][period] === null && 
-                      isTeacherAvailable(item.teacherId, day, period)) {
+                  // Check if subject already exists on this day
+                  const subjectAlreadyOnDay = timetables[className][day].some(slot => 
+                    slot && slot.subject === item.subject
+                  );
+                  
+                  if (!subjectAlreadyOnDay) {
+                    // Assign the period
+                    timetables[className][day][period] = {
+                      subject: item.subject,
+                      teacher: item.teacher.name,
+                      teacherId: item.teacher.id
+                    };
                     
-                    // Check if subject already exists on this day
-                    const subjectAlreadyOnDay = timetables[className][day].some(slot => 
-                      slot && slot.subject === item.subject
-                    );
+                    markTeacherOccupied(item.teacher.id, day, period, className);
+                    periodsAssigned++;
                     
-                    if (!subjectAlreadyOnDay) {
-                      // Assign the period
-                      timetables[className][day][period] = {
-                        subject: item.subject,
-                        teacher: teacher.name,
-                        teacherId: teacher.id
-                      };
-                      
-                      markTeacherOccupied(teacher.id, day, period, className);
-                      periodsAssigned++;
-                      
-                      console.log(`📖 Main Subject ${item.subject} assigned to ${teacher.name} on ${day} period ${period + 1} for ${className}`);
-                    }
+                    console.log(`📖 Main Subject ${item.subject} assigned to ${item.teacher.name} on ${day} period ${period + 1} for ${className}`);
                   }
                 }
               }
@@ -231,8 +252,8 @@ export const useTimetableGeneration = () => {
           });
         });
 
-        // === PHASE 3: FILL EXTRA SUBJECTS (PERIODS 5+ ON WEEKDAYS, 3+ ON SATURDAY) ===
-        console.log('🎨 Phase 3: Filling Extra Subjects');
+        // === PHASE 3: SMART EXTRA SUBJECTS DISTRIBUTION ===
+        console.log('🎨 Phase 3: Smart Extra Subjects Distribution');
         
         classConfigs.forEach(config => {
           const className = `${config.class}${config.division}`;
@@ -241,7 +262,7 @@ export const useTimetableGeneration = () => {
           console.log(`\n🏫 Processing Extra Subjects for ${className}`);
           
           // Create extra subject assignment queue
-          const extraSubjectQueue: Array<{subject: string, teacherId: string, periodsNeeded: number}> = [];
+          const extraSubjectQueue: Array<{subject: string, teacherId: string, periodsNeeded: number, teacher: Teacher}> = [];
           
           config.subjectAssignments.forEach(assignment => {
             if (!assignment.isMainSubject) {
@@ -257,87 +278,77 @@ export const useTimetableGeneration = () => {
               });
               
               const periodsNeeded = assignment.periodsPerWeek - assignedPeriods;
-              if (periodsNeeded > 0) {
+              const teacher = teachers.find(t => t.id === assignment.teacherId);
+              
+              if (periodsNeeded > 0 && teacher) {
                 extraSubjectQueue.push({
                   subject: assignment.subject,
                   teacherId: assignment.teacherId,
-                  periodsNeeded: periodsNeeded
+                  periodsNeeded: periodsNeeded,
+                  teacher: teacher
                 });
               }
             }
           });
 
-          // Sort extra subjects to avoid continuous scheduling
-          extraSubjectQueue.sort((a, b) => b.periodsNeeded - a.periodsNeeded);
+          // Shuffle extra subjects to avoid patterns
+          const shuffledExtraQueue = shuffleArray(extraSubjectQueue);
 
-          // Fill extra subjects in later periods with distribution
-          extraSubjectQueue.forEach(item => {
-            const teacher = teachers.find(t => t.id === item.teacherId);
-            if (!teacher) return;
-
+          // Fill extra subjects with advanced distribution
+          shuffledExtraQueue.forEach(item => {
             let periodsAssigned = 0;
-            let attempts = 0;
-            const maxAttempts = workingDays.length * 10;
+            const shuffledDays = shuffleArray(workingDays);
 
-            while (periodsAssigned < item.periodsNeeded && attempts < maxAttempts) {
-              attempts++;
+            for (const day of shuffledDays) {
+              if (periodsAssigned >= item.periodsNeeded) break;
               
-              for (const day of workingDays) {
+              const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
+              const extraPeriodStart = day === 'Saturday' ? 2 : 4;
+              
+              // Create varied time slots for extra subjects
+              const availableSlots = [];
+              for (let period = extraPeriodStart; period < periodsForDay; period++) {
+                availableSlots.push(period);
+              }
+              
+              const shuffledSlots = shuffleArray(availableSlots);
+              
+              for (const period of shuffledSlots) {
                 if (periodsAssigned >= item.periodsNeeded) break;
                 
-                const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
-                const extraPeriodStart = day === 'Saturday' ? 2 : 4; // Extra subjects start from period 5 on weekdays, 3 on Saturday
-                
-                for (let period = extraPeriodStart; period < periodsForDay; period++) {
-                  if (periodsAssigned >= item.periodsNeeded) break;
+                // Check if this slot is empty and teacher is available
+                if (timetables[className][day][period] === null && 
+                    isTeacherAvailable(item.teacherId, day, period)) {
                   
-                  // Check if this slot is empty and teacher is available
-                  if (timetables[className][day][period] === null && 
-                      isTeacherAvailable(item.teacherId, day, period)) {
+                  // Check if subject already exists on this day
+                  const subjectAlreadyOnDay = timetables[className][day].some(slot => 
+                    slot && slot.subject === item.subject
+                  );
+                  
+                  // Avoid consecutive extra subjects of same type
+                  const isPreviousSlotSimilarExtra = period > extraPeriodStart && 
+                    timetables[className][day][period - 1] &&
+                    activitySubjects.includes(timetables[className][day][period - 1]?.subject) &&
+                    activitySubjects.includes(item.subject);
+                  
+                  if (!subjectAlreadyOnDay && !isPreviousSlotSimilarExtra) {
+                    // Assign the period
+                    timetables[className][day][period] = {
+                      subject: item.subject,
+                      teacher: item.teacher.name,
+                      teacherId: item.teacher.id
+                    };
                     
-                    // Check if subject already exists on this day
-                    const subjectAlreadyOnDay = timetables[className][day].some(slot => 
-                      slot && slot.subject === item.subject
-                    );
+                    markTeacherOccupied(item.teacher.id, day, period, className);
+                    periodsAssigned++;
                     
-                    // Check if previous period has same type of subject (to avoid continuous extra subjects)
-                    const previousPeriodIsExtra = period > extraPeriodStart && 
-                      timetables[className][day][period - 1] &&
-                      config.subjectAssignments.find(a => 
-                        a.subject === timetables[className][day][period - 1]?.subject && 
-                        !a.isMainSubject
-                      );
-                    
-                    if (!subjectAlreadyOnDay && !previousPeriodIsExtra) {
-                      // Assign the period
-                      timetables[className][day][period] = {
-                        subject: item.subject,
-                        teacher: teacher.name,
-                        teacherId: teacher.id
-                      };
-                      
-                      markTeacherOccupied(teacher.id, day, period, className);
-                      periodsAssigned++;
-                      
-                      console.log(`🎨 Extra Subject ${item.subject} assigned to ${teacher.name} on ${day} period ${period + 1} for ${className}`);
-                    }
+                    console.log(`🎨 Extra Subject ${item.subject} assigned to ${item.teacher.name} on ${day} period ${period + 1} for ${className}`);
                   }
                 }
               }
             }
             
             console.log(`${className} - Extra Subject ${item.subject}: Assigned ${periodsAssigned}/${item.periodsNeeded} periods`);
-          });
-
-          // Fill any remaining empty slots with main subjects if available
-          workingDays.forEach(day => {
-            const periodsForDay = day === 'Saturday' ? config.saturdayPeriods : config.weekdayPeriods;
-            
-            for (let period = 0; period < periodsForDay; period++) {
-              if (timetables[className][day][period] === null) {
-                console.log(`${className} - Free period at ${day} period ${period + 1}`);
-              }
-            }
           });
         });
 
@@ -371,7 +382,7 @@ export const useTimetableGeneration = () => {
           });
         });
 
-        console.log('🎯 Enhanced Timetable Generation with Main/Extra Subjects completed successfully!');
+        console.log('🎯 Advanced Timetable Generation with Smart Distribution completed successfully!');
         
         resolve({ 
           timetables: timetables, 

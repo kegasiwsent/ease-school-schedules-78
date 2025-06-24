@@ -1,3 +1,4 @@
+
 import type { ScheduleState, Teacher, ClassConfig } from '@/types/timetable';
 
 // Activity subjects that should be distributed
@@ -46,9 +47,6 @@ export const canPlacePeriod = (
       return false;
     }
   }
-
-  // Modified: Since we only allow one period per day per subject, remove consecutive subject check
-  // This is now handled by the one-period-per-day rule above
 
   return true;
 };
@@ -115,8 +113,102 @@ export const updateScheduleState = (
   }
 };
 
-// NEW: Helper function to get even distribution of subjects across days
-export const getOptimalDayForSubject = (
+// NEW: Advanced distribution algorithms
+export const calculateSubjectDistributionScore = (
+  state: ScheduleState,
+  className: string,
+  subject: string,
+  day: string,
+  period: number,
+  totalPeriodsNeeded: number,
+  workingDays: string[]
+): number => {
+  let score = 0;
+  
+  // Prefer spreading subjects across different days
+  const subjectDayCount = state.subjectDayCount[className]?.[subject] || {};
+  const daysWithSubject = Object.keys(subjectDayCount).length;
+  const idealDaysToSpread = Math.min(totalPeriodsNeeded, workingDays.length);
+  
+  if (daysWithSubject < idealDaysToSpread) {
+    score += 10; // Bonus for spreading to new days
+  }
+  
+  // Prefer different time periods for variety
+  const timeSlotUsage = getTimeSlotUsageForSubject(state, className, subject, period);
+  score += (5 - timeSlotUsage); // Less used time slots get higher scores
+  
+  // Avoid placing same subject at same time across days
+  const sameTimeSlotUsage = getSameTimeSlotUsageAcrossDays(state, className, subject, period);
+  score -= sameTimeSlotUsage * 3; // Penalty for repetitive time slots
+  
+  return score;
+};
+
+export const getTimeSlotUsageForSubject = (
+  state: ScheduleState,
+  className: string,
+  subject: string,
+  period: number
+): number => {
+  let usage = 0;
+  Object.keys(state.timetables[className] || {}).forEach(day => {
+    const slot = state.timetables[className][day][period];
+    if (slot && slot.subject === subject) {
+      usage++;
+    }
+  });
+  return usage;
+};
+
+export const getSameTimeSlotUsageAcrossDays = (
+  state: ScheduleState,
+  className: string,
+  subject: string,
+  period: number
+): number => {
+  let usage = 0;
+  Object.keys(state.timetables[className] || {}).forEach(day => {
+    const slot = state.timetables[className][day][period];
+    if (slot && slot.subject === subject) {
+      usage++;
+    }
+  });
+  return usage;
+};
+
+export const getOptimalTimeSlots = (
+  state: ScheduleState,
+  className: string,
+  subject: string,
+  day: string,
+  periodsForDay: number,
+  totalPeriodsNeeded: number,
+  workingDays: string[],
+  isMainSubject: boolean
+): number[] => {
+  const availableSlots: Array<{period: number, score: number}> = [];
+  
+  const periodRange = isMainSubject 
+    ? (day === 'Saturday' ? [0, 1] : [0, 1, 2, 3]) // Main subjects in early periods
+    : (day === 'Saturday' ? [2, 3] : [4, 5, 6]); // Extra subjects in later periods
+  
+  for (let period = periodRange[0]; period <= Math.min(periodRange[1], periodsForDay - 1); period++) {
+    if (state.timetables[className][day][period] === null) {
+      const score = calculateSubjectDistributionScore(
+        state, className, subject, day, period, totalPeriodsNeeded, workingDays
+      );
+      availableSlots.push({ period, score });
+    }
+  }
+  
+  // Sort by score (highest first) and return periods
+  return availableSlots
+    .sort((a, b) => b.score - a.score)
+    .map(slot => slot.period);
+};
+
+export const getBalancedDayDistribution = (
   state: ScheduleState,
   className: string,
   subject: string,
@@ -125,21 +217,44 @@ export const getOptimalDayForSubject = (
 ): string[] => {
   const subjectDayCount = state.subjectDayCount[className]?.[subject] || {};
   
-  // Calculate how many days this subject should be spread across
-  const targetDays = Math.min(remainingPeriods, workingDays.length);
+  // Calculate target distribution
+  const periodsPerDay = Math.floor(remainingPeriods / workingDays.length);
+  const extraPeriods = remainingPeriods % workingDays.length;
   
-  // Find days where this subject hasn't been placed yet
-  const availableDays = workingDays.filter(day => !subjectDayCount[day]);
+  const dayPriority = workingDays.map(day => ({
+    day,
+    currentCount: subjectDayCount[day] || 0,
+    targetCount: periodsPerDay + (extraPeriods > 0 ? 1 : 0),
+    priority: 0
+  }));
   
-  // If we have enough available days, use them
-  if (availableDays.length >= targetDays) {
-    return availableDays.slice(0, targetDays);
+  // Calculate priority scores
+  dayPriority.forEach(item => {
+    item.priority = item.targetCount - item.currentCount;
+  });
+  
+  // Sort by priority (highest first) and return days
+  return dayPriority
+    .filter(item => item.priority > 0)
+    .sort((a, b) => b.priority - a.priority)
+    .map(item => item.day);
+};
+
+export const shuffleArray = <T>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  
-  // Otherwise, find days with the least occurrences of this subject
-  const daysByCount = workingDays
-    .map(day => ({ day, count: subjectDayCount[day] || 0 }))
-    .sort((a, b) => a.count - b.count);
-  
-  return daysByCount.slice(0, targetDays).map(item => item.day);
+  return shuffled;
+};
+
+export const getOptimalDayForSubject = (
+  state: ScheduleState,
+  className: string,
+  subject: string,
+  workingDays: string[],
+  remainingPeriods: number
+): string[] => {
+  return getBalancedDayDistribution(state, className, subject, workingDays, remainingPeriods);
 };

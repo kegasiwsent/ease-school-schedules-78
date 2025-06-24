@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar } from 'lucide-react';
+import { Calendar, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import TimetableDisplay from './TimetableDisplay';
 import TeacherForm from './timetable/TeacherForm';
@@ -9,14 +9,14 @@ import BulkImportTeachers from './timetable/BulkImportTeachers';
 import ClassConfigForm from './timetable/ClassConfigForm';
 import SubjectAssignmentForm from './timetable/SubjectAssignmentForm';
 import StepNavigation from './timetable/StepNavigation';
-import { useTimetableGeneration } from '@/hooks/useTimetableGeneration';
+import { useGeminiTimetableGeneration } from '@/hooks/useGeminiTimetableGeneration';
 import { useTeachers } from '@/hooks/useTeachers';
 import { useTimetableHistory } from '@/hooks/useTimetableHistory';
 import type { Teacher, ClassConfig, GeneratedTimetables } from '@/types/timetable';
 
 const TimetableGenerator = () => {
   const { toast } = useToast();
-  const { generateTimetables: generateTimetablesHook } = useTimetableGeneration();
+  const { generateTimetables: generateTimetablesHook } = useGeminiTimetableGeneration();
   const { teachers, saveTeacher, updateTeacher, deleteTeacher, loading: teachersLoading } = useTeachers();
   const { saveTimetable } = useTimetableHistory();
   const [currentStep, setCurrentStep] = useState(1);
@@ -189,28 +189,30 @@ const TimetableGenerator = () => {
     });
   };
 
-  // Step 5: Generate Timetables
+  // Step 5: Generate Timetables with AI
   const handleGenerateTimetables = async () => {
     setIsGenerating(true);
     
     try {
+      console.log('🤖 Starting AI-powered timetable generation...');
       const result = await generateTimetablesHook(teachers, classConfigs);
       setGeneratedTimetables(result);
       
       const timestamp = new Date().toLocaleString();
-      const timetableName = `Timetable - ${timestamp}`;
+      const timetableName = `AI Timetable - ${timestamp}`;
       await saveTimetable(timetableName, result, classConfigs, teachers);
       
       setCurrentStep(5);
       
       toast({
-        title: "Enhanced Timetables Generated! 🎉",
-        description: `Successfully generated and saved optimized timetables.`,
+        title: "AI Timetables Generated! 🤖✨",
+        description: `Successfully generated and saved optimized timetables using Gemini AI.`,
       });
     } catch (error) {
+      console.error('AI Timetable generation error:', error);
       toast({
-        title: "Generation Failed",
-        description: "There was an error generating the timetables. Please try again.",
+        title: "AI Generation Failed",
+        description: error.message || "There was an error generating the timetables with AI. Please check your Gemini API key and try again.",
         variant: "destructive"
       });
     } finally {
@@ -316,11 +318,12 @@ const TimetableGenerator = () => {
   return (
     <div className="space-y-8">
       <div className="text-center">
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">
-          Automatic Timetable Generator
+        <h2 className="text-3xl font-bold text-gray-900 mb-4 flex items-center justify-center gap-2">
+          <Sparkles className="w-8 h-8 text-purple-600" />
+          AI-Powered Timetable Generator
         </h2>
         <p className="text-lg text-gray-600">
-          Follow the step-by-step process to create optimized timetables
+          Follow the step-by-step process to create AI-optimized timetables using Gemini
         </p>
       </div>
 
@@ -331,14 +334,14 @@ const TimetableGenerator = () => {
             <React.Fragment key={step}>
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${
                 currentStep >= step 
-                  ? 'bg-blue-600 text-white' 
+                  ? 'bg-purple-600 text-white' 
                   : 'bg-gray-200 text-gray-600'
               }`}>
                 {step === 5 ? '4' : step === 4 ? '3' : step}
               </div>
               {index < 3 && (
                 <div className={`w-12 h-1 ${
-                  currentStep > step ? 'bg-blue-600' : 'bg-gray-200'
+                  currentStep > step ? 'bg-purple-600' : 'bg-gray-200'
                 }`} />
               )}
             </React.Fragment>
@@ -351,7 +354,13 @@ const TimetableGenerator = () => {
           <CardTitle className="flex items-center space-x-2">
             <Calendar className="w-5 h-5" />
             <span>{getStepTitle()}</span>
+            {currentStep === 5 && <Sparkles className="w-5 h-5 text-purple-600" />}
           </CardTitle>
+          {currentStep === 5 && (
+            <CardDescription>
+              Generated using advanced AI optimization with Gemini
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent>
           {renderStepContent()}
